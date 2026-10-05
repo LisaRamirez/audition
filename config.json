@@ -1,0 +1,187 @@
+{
+  "tiempos_min": {
+    "romero": 7,
+    "menta_verde": 23
+  },
+  "margen_seg": 0,
+  "segundos_sin_tocar": 4,
+  "cuenta_regresiva": 5,
+  "umbral_cartel": 30,
+  "pausa_clic_min": 0.15,
+  "pausa_clic_max": 0.25,
+  "pasadas": 2,
+  "espera_verificar": 0.3,
+  "verificacion": {
+    "cosechar": {
+      "umbral": 12,
+      "intentos": 2
+    },
+    "sembrar": {
+      "umbral": 8
+    },
+    "regar": {
+      "umbral": 3,
+      "contador": [
+        528,
+        484,
+        586,
+        500
+      ]
+    },
+    "fertilizar": {
+      "umbral": 3,
+      "contador": [
+        590,
+        484,
+        650,
+        500
+      ]
+    }
+  },
+  "umbral_dialogo": 25,
+  "boton_confirmar": [
+    510,
+    568
+  ],
+  "parcelas": {
+    "x0": 387,
+    "y0": 192,
+    "dx": 64,
+    "dy": 64,
+    "columnas": 5,
+    "filas": 4
+  },
+  "herramientas": {
+    "sembrar": [
+      410,
+      475
+    ],
+    "cosechar": [
+      463,
+      475
+    ],
+    "regar": [
+      520,
+      475
+    ],
+    "fertilizar": [
+      577,
+      472
+    ],
+    "resucitar": [
+      640,
+      472
+    ]
+  },
+  "siembra": {
+    "x0": 371,
+    "y0": 176
+  },
+  "pausa_arrastre": 0.45,
+  "pausa_abono": 0.18,
+  "auto_resucitar": false,
+  "marchita_umbral": 0.4,
+  "hoja_umbral": 0.05,
+  "semillas": {
+    "romero": [
+      355,
+      340
+    ],
+    "menta_verde": [
+      512,
+      340
+    ]
+  },
+  "limite_marchita_min": {
+    "romero": 4,
+    "menta_verde": 12,
+    "menta": 64
+  },
+  "maduro_brillante": 0.1,
+  "espera_maduracion_seg": 50,
+  "drops": {
+    "x0": 370,
+    "y0": 215,
+    "dx": 64,
+    "dy": 65
+  },
+  "terreno_libre": [
+    150,
+    300
+  ],
+  "saco_min_px": 60,
+  "max_drops_por_parcela": 10,
+  "asentar_rapido": 0.06,
+  "pausa_siembra": 0.12,
+  "revisar_mas_drops": false,
+  "reintentar_sin_dialogo": true,
+  "pausa_resucitar": 0.5,
+  "boton_cambiar_jardin": [
+    338,
+    62
+  ],
+  "espera_cambio_jardin": 5.0,
+  "umbral_pantalla": 30,
+  "nav_couple_garden": [
+    815,
+    645
+  ],
+  "nav_icono_garden": [
+    603,
+    62
+  ],
+  "nav_servidor": [
+    100,
+    350
+  ],
+  "nav_canal": [
+    270,
+    462
+  ],
+  "nav_entrar": [
+    922,
+    714
+  ],
+  "pausa_cosecha": 0.9,
+  "tolerancia_mouse": 14,
+  "cortar_desalineadas": false,
+  "couple_visita": false,
+  "visita_seg": 90,
+  "visita_cada_seg": 5,
+  "umbral_sin_herramienta": 12,
+  "asentar_cosecha": 0.35,
+  "boton_aviso_maximo": [
+    655,
+    405
+  ],
+  "drops_vacios_para_parar": 2,
+  "items_suelo_inicial": 30,
+  "limite_items_seguro": 30,
+  "sacos_para_limpiar_antes": 3,
+  "madurez_menta_verde": {
+    "hoja_min": 0.55,
+    "azul_max": 0.05
+  },
+  "patron": [
+    "romero",
+    "romero",
+    "romero",
+    "menta_verde"
+  ],
+  "horario": [
+    {
+      "desde": "08:00",
+      "hasta": "20:00",
+      "semilla": "menta_verde"
+    },
+    {
+      "desde": "20:00",
+      "hasta": "08:00",
+      "semilla": "romero"
+    }
+  ],
+  "horario_por_defecto": "romero",
+  "madurez_por_reloj": [
+    "menta_verde"
+  ]
+}

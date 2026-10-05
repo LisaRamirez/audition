@@ -1,0 +1,23 @@
+# Capturas, registros, copias y estado local: no se suben
+*.png
+*.jpg
+*.bmp
+*.log
+*.bak*
+*.flag
+estado.json
+observacion/
+__pycache__/
+# Pruebas y exploraciones desechables
+prueba_*.py
+explorar_*.py
+spike_*.py
+calibrar_*.py
+probar_*.py
+observar_*.py
+ir_*.py
+entrar_*.py
+audi_util.py
+matar.txt
+# Excepcion: las imagenes de referencia SI se suben
+!referencias/*.png
