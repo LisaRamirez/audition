@@ -183,5 +183,38 @@
   "horario_por_defecto": "romero",
   "madurez_por_reloj": [
     "menta_verde"
-  ]
+  ],
+  "reingreso": {
+    "umbral": 22,
+    "jugar_desde_esquina_inf_der": [
+      104,
+      47
+    ],
+    "campo_usuario": [
+      518,
+      377
+    ],
+    "campo_password": [
+      518,
+      401
+    ],
+    "ingresar": [
+      647,
+      373
+    ],
+    "cerrar_items": [
+      639,
+      165
+    ],
+    "aceptar_aviso": [
+      599,
+      413
+    ],
+    "lanzador": "J:\\Audition\\Patcher.exe",
+    "cerrar_mercado": [
+      780,
+      232
+    ]
+  },
+  "sonido": false
 }

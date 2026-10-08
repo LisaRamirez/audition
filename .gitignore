@@ -21,3 +21,16 @@ audi_util.py
 matar.txt
 # Excepcion: las imagenes de referencia SI se suben
 !referencias/*.png
+
+credenciales.json
+
+cuenta.dat
+
+# Ajustes locales, cuenta e imagenes personales (no se suben)
+ajustes.json
+sonido.json
+.claude/
+referencias/pantalla_login.png
+referencias/aviso_circulo.png
+cuenta.dat
+credenciales.json

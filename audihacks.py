@@ -12,12 +12,17 @@ import ctypes
 import json
 import os
 import random
+import subprocess
 import sys
 import threading
 import time
 from ctypes import wintypes
 
 from PIL import Image, ImageChops, ImageStat
+
+import ajustes
+import cuenta
+import sonido
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 user32 = ctypes.windll.user32
@@ -48,11 +53,16 @@ class PantallaDesconocida(Detenido):
     """El juego esta en una pantalla que no conozco (login, desconexion...). Se espera, no se muere."""
 
 
+class SinJuego(PantallaDesconocida):
+    """No hay ventana 'Audition' (el juego se cerro o aun no abre)."""
+
+
 class Interferencia(Exception):
     """El usuario movio el mouse o hizo clic mientras el programa trabajaba."""
 
 
 _ESPERADO = None      # (x, y) de pantalla donde dejamos el cursor; None = no vigilar
+_DERIVAS = []         # instantes de las ultimas correcciones de deriva del mouse
 _PULSANDO = False     # True mientras el propio programa mantiene un boton pulsado
 
 
@@ -67,10 +77,24 @@ def _revisar_usuario():
     cur = wintypes.POINT()
     user32.GetCursorPos(ctypes.byref(cur))
     tol = CFG["tolerancia_mouse"]
-    if abs(cur.x - _ESPERADO[0]) > tol or abs(cur.y - _ESPERADO[1]) > tol:
-        raise Interferencia("el mouse se movio")
+    dx, dy = cur.x - _ESPERADO[0], cur.y - _ESPERADO[1]
+    if (abs(dx) > tol or abs(dy) > tol) and not _PULSANDO and max(abs(dx), abs(dy)) <= CFG.get("tolerancia_deriva", 45):
+        # desvio chico (vibracion, mouse inalambrico...): se devuelve el cursor a su sitio en vez de abortar,
+        # salvo que pase muchas veces seguidas (entonces es una persona moviendo el mouse)
+        ahora = time.time()
+        _DERIVAS[:] = [t for t in _DERIVAS if ahora - t < 6]
+        if len(_DERIVAS) < 5:
+            _DERIVAS.append(ahora)
+            user32.SetCursorPos(_ESPERADO[0], _ESPERADO[1])
+            if len(_DERIVAS) == 1:
+                log(f"Deriva del mouse corregida: ({dx},{dy}) px")
+            return
+    if abs(dx) > tol or abs(dy) > tol:
+        raise Interferencia(f"el mouse se movio: esperado {_ESPERADO}, estaba en ({cur.x},{cur.y}), "
+                            f"desvio ({cur.x - _ESPERADO[0]},{cur.y - _ESPERADO[1]}), "
+                            f"{segundos_sin_tocar():.1f} s desde la ultima entrada del usuario")
     if not _PULSANDO and (user32.GetAsyncKeyState(0x01) & 0x8000):
-        raise Interferencia("clic del usuario")
+        raise Interferencia(f"clic del usuario ({segundos_sin_tocar():.1f} s desde la ultima entrada)")
 
 
 _STOP = threading.Event()
@@ -109,10 +133,10 @@ def dormir(seg):
 
 
 def alarma(veces=4):
-    """Pitidos fuertes para llamar la atencion del usuario."""
+    """Avisos sonoros para llamar la atencion (volumen e interruptores en sonido.json, desde la interfaz)."""
     for _ in range(veces):
-        ctypes.windll.kernel32.Beep(1000, 250)
-        ctypes.windll.kernel32.Beep(600, 250)
+        sonido.pitar(1000, 250)
+        sonido.pitar(600, 250)
 
 
 def log(txt):
@@ -120,6 +144,28 @@ def log(txt):
     print(linea, flush=True)
     with open(os.path.join(AQUI, "audihacks.log"), "a", encoding="utf-8") as f:
         f.write(linea + "\n")
+
+
+def buscar_plantilla(img, ref, paso=2):
+    """Desliza la plantilla 'ref' sobre 'img' (ambas PIL) y devuelve (diferencia media, (x, y)) del mejor sitio."""
+    import numpy as np
+    a = np.asarray(img.convert("RGB")).astype(np.int16)
+    r = np.asarray(ref.convert("RGB")).astype(np.int16)
+    h, w = r.shape[:2]
+    mejor, pos = 1e9, None
+    for y in range(0, a.shape[0] - h + 1, paso):
+        for x in range(0, a.shape[1] - w + 1, paso):
+            d = float(np.abs(a[y:y + h, x:x + w] - r).mean())
+            if d < mejor:
+                mejor, pos = d, (x, y)
+    if pos is not None and paso > 1:                       # afina a 1 px alrededor del mejor sitio
+        bx, by = pos
+        for y in range(max(0, by - paso + 1), min(a.shape[0] - h, by + paso - 1) + 1):
+            for x in range(max(0, bx - paso + 1), min(a.shape[1] - w, bx + paso - 1) + 1):
+                d = float(np.abs(a[y:y + h, x:x + w] - r).mean())
+                if d < mejor:
+                    mejor, pos = d, (x, y)
+    return mejor, pos
 
 
 class Audition:
@@ -132,7 +178,7 @@ class Audition:
     def localizar(self):
         self.hwnd = user32.FindWindowW(None, "Audition")
         if not self.hwnd:
-            raise Detenido("No encuentro la ventana de Audition")
+            raise SinJuego("No encuentro la ventana de Audition")
         if user32.IsIconic(self.hwnd):
             user32.ShowWindow(self.hwnd, 9)
         for _ in range(4):
@@ -145,7 +191,7 @@ class Audition:
             if user32.GetForegroundWindow() == self.hwnd:
                 break
         else:
-            raise Detenido("No pude traer Audition al frente")
+            raise Reintentar("No pude traer Audition al frente (otra ventana lo tapa)")
         p = wintypes.POINT(0, 0)
         user32.ClientToScreen(self.hwnd, ctypes.byref(p))
         self.ox, self.oy = p.x, p.y
@@ -318,6 +364,9 @@ class Audition:
                 if p == "secret":
                     return True
                 if p is None:
+                    if self.cerrar_avisos():             # un cartel tapa la pantalla: cerrarlo y mirar de nuevo
+                        dormir(1.0)
+                        continue
                     raise PantallaDesconocida("Pantalla desconocida (login, desconexion u otra). No toco nada.")
                 log(f"Estoy en '{p}': voy hacia el Secret Garden")
                 self.soltar_herramienta() if p in ("couple",) else None
@@ -335,6 +384,247 @@ class Audition:
             raise Detenido("No llegue al Secret Garden tras 8 pasos")
         finally:
             self._sin_vigilar = previo
+
+
+    # --- reingreso automatico (lanzador -> login -> carteles) ---
+    REF_REINGRESO = {
+        "login":         ("pantalla_login.png",      (356, 322, 711, 458)),
+        "items_nuevos":  ("cartel_items_nuevos.png", (618, 146, 658, 181)),
+        "aviso_circulo": ("aviso_circulo.png",       (579, 404, 619, 422)),
+        "mercado":       ("panel_mercado.png",       (320, 105, 700, 170)),
+    }
+
+    def coincide(self, nombre, umbral=None):
+        """True si la zona de pantalla se parece a la referencia. False si aun no se ha guardado."""
+        archivo, caja = self.REF_REINGRESO[nombre]
+        ruta = os.path.join(AQUI, "referencias", archivo)
+        if not os.path.exists(ruta):
+            return False
+        ref = Image.open(ruta).convert("RGB")
+        dif = sum(ImageStat.Stat(ImageChops.difference(ref, self.captura(caja))).mean) / 3
+        return dif < (umbral or CFG["reingreso"]["umbral"])
+
+    def buscar_boton_circulo(self):
+        """Busca el boton circular de los cuadros azules del juego en la zona central, sin importar donde caiga
+        el cuadro. Devuelve (x, y) del cliente o None."""
+        ruta = os.path.join(AQUI, "referencias", "boton_circulo.png")
+        if not os.path.exists(ruta):
+            return None
+        zx0, zy0, zx1, zy1 = 250, 250, 780, 520
+        ref = Image.open(ruta)
+        dif, pos = buscar_plantilla(self.captura((zx0, zy0, zx1, zy1)), ref)
+        if pos is None or dif > CFG["reingreso"].get("umbral_circulo", 16):
+            return None
+        return zx0 + pos[0] + ref.width // 2, zy0 + pos[1] + ref.height // 2
+
+    def hay_error_servidor(self):
+        """Cuadro azul 'No hay respuesta del servidor' (el juego perdio la conexion)."""
+        ruta = os.path.join(AQUI, "referencias", "texto_error_servidor.png")
+        if not os.path.exists(ruta):
+            return False
+        zx0, zy0, zx1, zy1 = 250, 250, 780, 520
+        dif, _ = buscar_plantilla(self.captura((zx0, zy0, zx1, zy1)), Image.open(ruta))
+        return dif <= CFG["reingreso"].get("umbral_error_servidor", 14)
+
+    def cerrar_juego_y_reingresar(self):
+        """Pierde el servidor: se cierra el juego del todo (no sirve volver con la sesion rota) y se entra de cero."""
+        global _PULSANDO
+        log("ERROR DEL SERVIDOR ('No hay respuesta del servidor'): cierro el juego y reingreso de cero")
+        desarmar()
+        _PULSANDO = False
+        user32.mouse_event(0x0004, 0, 0, 0, 0)
+        h = user32.FindWindowW(None, "Audition")
+        if h:
+            user32.PostMessageW(h, 0x0010, 0, 0)                       # WM_CLOSE
+            for _ in range(15):
+                dormir(1.0)
+                if not user32.FindWindowW(None, "Audition"):
+                    break
+        if user32.FindWindowW(None, "Audition"):
+            subprocess.run(["taskkill", "/F", "/IM", "Audition.exe"], capture_output=True, creationflags=0x08000000)
+            dormir(3.0)
+        dormir(2.0)
+        return self.reingresar(forzar=True)
+
+    def cerrar_avisos(self):
+        """Cierra los carteles/avisos conocidos (Items nuevos, aviso con boton circular). True si cerro alguno."""
+        r = CFG["reingreso"]
+        cerro = False
+        if self.hay_error_servidor():
+            self.cerrar_juego_y_reingresar()
+            raise SinJuego("Tras el error del servidor se reingreso: el ciclo vuelve a mirar el estado real")
+        centro = self.buscar_boton_circulo()
+        if centro:
+            log(f"Cuadro azul del juego detectado (boton circular en {centro}): lo cierro")
+            self.mover(*centro)
+            self._pulsar()
+            dormir(1.5)
+            cerro = True
+        for nombre, punto in (("items_nuevos", r["cerrar_items"]), ("mercado", r["cerrar_mercado"])):
+            if self.coincide(nombre):
+                log(f"Cartel '{nombre}' detectado: lo cierro")
+                self.mover(*punto)
+                self._pulsar()
+                dormir(1.0)
+                cerro = True
+        return cerro
+
+    @staticmethod
+    def hwnd_lanzador():
+        """Ventana del lanzador ('Audition Setup Manager ...'), o 0."""
+        enum = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        hallado = []
+
+        def cb(h, _l):
+            b = ctypes.create_unicode_buffer(120)
+            user32.GetWindowTextW(h, b, 120)
+            if b.value.startswith("Audition Setup Manager") and user32.IsWindowVisible(h):
+                hallado.append(h)
+            return True
+        user32.EnumWindows(enum(cb), 0)
+        return hallado[0] if hallado else 0
+
+    def pulsar_jugar(self, h):
+        """Pulsa 'JUGAR' del lanzador (boton abajo a la derecha de su ventana)."""
+        for _ in range(3):
+            user32.keybd_event(0x12, 0, 0, 0)
+            user32.keybd_event(0x12, 0, 2, 0)
+            if user32.IsIconic(h):
+                user32.ShowWindow(h, 9)
+            user32.SetForegroundWindow(h)
+            dormir(0.5)
+            if user32.GetForegroundWindow() == h:
+                break
+        rc = wintypes.RECT()
+        user32.GetWindowRect(h, ctypes.byref(rc))
+        dx, dy = CFG["reingreso"]["jugar_desde_esquina_inf_der"]
+        previo = (self.ox, self.oy)
+        self.ox = self.oy = 0
+        try:
+            self.mover(rc.right - dx, rc.bottom - dy)
+            self._pulsar()
+        finally:
+            self.ox, self.oy = previo
+
+    @staticmethod
+    def teclear(texto):
+        """Escribe con teclas reales (el juego no acepta texto por mensajes)."""
+        for ch in texto:
+            r = user32.VkKeyScanW(ord(ch))
+            if r == -1:
+                continue
+            vk, mayus = r & 0xFF, (r >> 8) & 1
+            scan = user32.MapVirtualKeyW(vk, 0)
+            if mayus:
+                user32.keybd_event(0x10, 0x2A, 0, 0)
+            user32.keybd_event(vk, scan, 0, 0)
+            time.sleep(0.03)
+            user32.keybd_event(vk, scan, 2, 0)
+            if mayus:
+                user32.keybd_event(0x10, 0x2A, 2, 0)
+            dormir(0.07)
+
+    @staticmethod
+    def borrar_campo(n=30):
+        for _ in range(n):
+            user32.keybd_event(0x08, 0x0E, 0, 0)
+            user32.keybd_event(0x08, 0x0E, 2, 0)
+            time.sleep(0.015)
+
+    def iniciar_sesion(self, datos):
+        r = CFG["reingreso"]
+        clave = cuenta.password_en_claro()
+        if datos.get("usuario"):
+            self.mover(*r["campo_usuario"]); self._pulsar(); dormir(0.4)
+            self.borrar_campo(); desarmar(); self.teclear(datos["usuario"])
+        self.mover(*r["campo_password"]); self._pulsar(); dormir(0.4)
+        self.borrar_campo(); desarmar(); self.teclear(clave)
+        log("Login: usuario y contrasena escritos; pulso INGRESAR")
+        self.mover(*r["ingresar"]); self._pulsar()
+
+    def reingresar(self, forzar=False):
+        """Si el juego se cerro o volvio al login: JUGAR en el lanzador, login, cerrar carteles.
+        True si hizo algo (el ciclo vuelve a mirar el estado real). False si no era un caso conocido."""
+        datos = cuenta.cargar()
+        if not datos or not datos.get("reingreso_auto") or not datos.get("password"):
+            return False
+        ahora = time.time()
+        self._reingresos = [t for t in getattr(self, "_reingresos", []) if ahora - t < 1800]
+        h_lanz = self.hwnd_lanzador()
+        h_juego = user32.FindWindowW(None, "Audition")
+        en_login = False
+        if h_juego:
+            try:
+                self.localizar()
+                en_login = self.coincide("login")
+            except SinJuego:
+                h_juego = 0
+            except Reintentar:                       # el juego existe pero no logre ponerlo al frente
+                return False
+        ruta = CFG["reingreso"].get("lanzador", "")
+        desde_cero = not h_juego and not h_lanz and os.path.exists(ruta)
+        if not forzar and not en_login and not (h_lanz and not h_juego) and not desde_cero:
+            return False       # solo: login, juego cerrado con lanzador visible, o todo cerrado
+        if len(self._reingresos) >= 4:
+            log("Reingreso: ya intente 4 veces en 30 min; espero antes de reintentar")
+            alarma(3)
+            dormir(60)
+            return True
+        self._reingresos.append(ahora)
+        log("REINGRESO AUTOMATICO: el juego no esta en pantalla de juego")
+        esperar_turno(minimo=2)
+        try:
+            if desde_cero:
+                log(f"Reingreso desde cero: abro el lanzador {ruta}")
+                subprocess.Popen([ruta], cwd=os.path.dirname(ruta))
+                for _ in range(90):
+                    dormir(1.0)
+                    h_lanz = self.hwnd_lanzador()
+                    if h_lanz:
+                        dormir(8.0)                  # deja que cargue / revise parches
+                        break
+                else:
+                    log("Reingreso: el lanzador no abrio")
+                    return True
+            if not h_juego and h_lanz:
+                log("Reingreso: pulso JUGAR en el lanzador")
+                for espera in range(150):            # espera a que abra la ventana del juego
+                    if espera % 40 == 0 and self.hwnd_lanzador():
+                        self.pulsar_jugar(self.hwnd_lanzador())     # reintenta JUGAR si sigue en el lanzador
+                    dormir(1.0)
+                    if user32.FindWindowW(None, "Audition"):
+                        dormir(3.0)
+                        break
+                else:
+                    log("Reingreso: el juego no abrio tras JUGAR")
+                    return True
+            logueado = False
+            t_ini = time.time()
+            ruta_login = os.path.join(AQUI, "referencias", self.REF_REINGRESO["login"][0])
+            fin = time.time() + 150
+            while time.time() < fin:
+                dormir(1.0)
+                try:
+                    self.localizar()
+                except (SinJuego, Reintentar):
+                    continue
+                if self.cerrar_avisos():
+                    continue
+                sin_ref = not os.path.exists(ruta_login)
+                # sin imagen de referencia del login: si el juego recien abrio y no es ninguna pantalla conocida,
+                # se asume que es el login (y se guarda la imagen para la proxima vez)
+                if not logueado and (self.coincide("login") or (sin_ref and time.time() - t_ini > 40
+                                                                 and not self.detectar_pantalla())):
+                    self.iniciar_sesion(datos)
+                    logueado = True
+                    dormir(5.0)
+                    continue
+                if self.detectar_pantalla():
+                    log("Reingreso: ya estoy dentro del juego")
+                    return True
+        except Interferencia as e:
+            self.recuperar(str(e))
+        return True
 
     # --- mouse ---
     def mover(self, cx, cy, rapido=False):
@@ -449,8 +739,10 @@ class Audition:
         self.recorrer_verificado(herramienta, solo_una)
 
     def todas_las_celdas(self):
+        """Las parcelas del programa: todas menos las que el usuario marco como suyas (ajustes 'excluir')."""
+        excl = {tuple(int(x) for x in k.split(",")) for k in ajustes.leer().get("excluir", [])}
         return [(f, c) for f in range(CFG["parcelas"]["filas"])
-                for c in range(CFG["parcelas"]["columnas"])]
+                for c in range(CFG["parcelas"]["columnas"]) if (f, c) not in excl]
 
     def recorrer_verificado(self, herramienta, solo_una=False, celdas=None):
         v = CFG["verificacion"][herramienta]
@@ -657,6 +949,14 @@ class Audition:
         crema = (a[..., 0] > 205) & (a[..., 1] > 195) & (a[..., 2] > 160)
         return int(crema.sum()) >= CFG["saco_min_px"]
 
+    def hay_saco_aqui(self, f, c):
+        """Como hay_saco pero capturando solo la zona del saco (mucho mas barato que toda la pantalla)."""
+        import numpy as np
+        x, y = self.punto_saco(f, c)
+        a = np.asarray(self.captura((x - 14, y - 12, x + 14, y + 12))).astype(int)
+        crema = (a[..., 0] > 205) & (a[..., 1] > 195) & (a[..., 2] > 160)
+        return int(crema.sum()) >= CFG["saco_min_px"]
+
     def sacos_presentes(self):
         img = self.captura((0, 0, 1024, 768))
         return [(f, c) for f, c in self.todas_las_celdas() if self.hay_saco(img, f, c)]
@@ -666,40 +966,76 @@ class Audition:
         while time.time() < fin:
             if self.hay_dialogo():
                 return True
-            dormir(0.08)
+            dormir(0.04)
         return False
 
     def confirmar_dialogo_rapido(self):
-        """Enter confirma el cuadro sin mover el mouse; si no se cierra, se pulsa el boton."""
-        user32.keybd_event(0x0D, 0, 0, 0)
-        user32.keybd_event(0x0D, 0, 2, 0)
-        dormir(0.35)
-        if self.hay_dialogo():
-            self.cerrar_dialogo()
+        """Pulsa Confirmar y sigue en cuanto el cuadro desaparece (sondeo cada 50 ms, tope 1.5 s).
+        Si no se cierra, usa el metodo lento de siempre (clic + Enter)."""
+        if CFG.get("drops_enter", True) and not (getattr(self, "_enter_mal", 0) >= 3
+                                                  and not getattr(self, "_enter_bien", 0)):
+            user32.keybd_event(0x0D, 0x1C, 0, 0)                 # Enter con scancode (0x1C)
+            time.sleep(0.03)
+            user32.keybd_event(0x0D, 0x1C, 2, 0)
+            fin = time.time() + 0.7
+            while time.time() < fin:
+                dormir(0.03)
+                if not self.hay_dialogo():
+                    self._enter_bien = getattr(self, "_enter_bien", 0) + 1
+                    return
+            self._enter_mal = getattr(self, "_enter_mal", 0) + 1
+        self.mover(*CFG["boton_confirmar"], rapido=True)
+        self._pulsar(rapido=True)
+        fin = time.time() + 1.5
+        while time.time() < fin:
+            if not self.hay_dialogo():
+                return
+            dormir(0.04)
+        self.cerrar_dialogo()
 
     def recoger_drops(self):
         """Levanta los drops hasta que NO quede ningun saco a la vista. El saco desaparece cuando se
         levanta todo lo de esa parcela, asi que se comprueba mirando y se repite solo donde quede.
         (El juego admite ~40-50 items en el suelo; si se acumulan, no deja cosechar.)"""
+        t0 = time.time()
         self.cerrar_dialogo()
         self.soltar_herramienta()
         total = 0
         objetivo = self.todas_las_celdas()
+        if CFG.get("drops_solo_con_saco", True):
+            # ir solo a las parcelas con saco: no gastar clics (2 x 1.1 s) en las que estan vacias
+            objetivo = self.sacos_presentes()
+            log(f"Sacos a la vista: {len(objetivo)} de {len(self.todas_las_celdas())} parcelas")
         restantes = []
-        for pasada in range(1, 4):
+        asentar_previo = CFG["asentar_rapido"]
+        CFG["asentar_rapido"] = min(asentar_previo, 0.03)          # mover mas ligero mientras se recogen drops
+        for pasada in range(1, 7):
             for f, c in objetivo:
                 x, y = self.punto_saco(f, c)
                 sin = 0
                 for _ in range(CFG["max_drops_por_parcela"]):
+                    ta = time.time()
                     self.vigilar_sin_dialogo()
                     self.mover(x, y, rapido=True)
                     self._pulsar(rapido=True)
+                    tb = time.time()
                     if self.esperar_dialogo(0.9):
+                        tc = time.time()
                         total += 1
                         sin = 0
                         self.confirmar_dialogo_rapido()
+                        log(f"  drop ({f},{c}): clic {tb - ta:.1f} s, cuadro tarda {tc - tb:.1f} s, "
+                            f"confirmar {time.time() - tc:.1f} s (enter ok {getattr(self, '_enter_bien', 0)}, "
+                            f"fallo {getattr(self, '_enter_mal', 0)})")
+                        if CFG.get("drops_una_por_pasada", True):
+                            break      # siguiente parcela; si aun queda saco, la pasada siguiente vuelve solo ahi
+                        if CFG.get("drops_corte_rapido", True):
+                            dormir(0.18)
+                            if not self.hay_saco_aqui(f, c):
+                                break
                     else:
                         sin += 1
+                        log(f"  sin cuadro en ({f},{c}) tras {time.time() - ta:.1f} s")
                         if sin >= CFG["drops_vacios_para_parar"]:
                             break
             self.mover(*CFG["terreno_libre"])
@@ -709,10 +1045,11 @@ class Audition:
                 break
             log(f"Pasada {pasada}: aun se ven sacos en {len(restantes)} parcelas {restantes}")
             objetivo = restantes
+        CFG["asentar_rapido"] = asentar_previo
         self._items_suelo = len(restantes)
         if restantes:
-            log(f"AVISO: quedan sacos en {len(restantes)} parcelas tras 3 pasadas")
-        log(f"Drops recogidos: {total}; sacos que quedan a la vista: {len(restantes)}")
+            log(f"AVISO: quedan sacos en {len(restantes)} parcelas tras 6 pasadas")
+        log(f"Drops recogidos: {total}; sacos que quedan a la vista: {len(restantes)} ({time.time() - t0:.0f} s)")
         return total
 
     def vigilar_sin_dialogo(self):
@@ -825,7 +1162,7 @@ class Audition:
             if not pendientes:
                 return True
         log(f"AVISO: {len(pendientes)} parcelas sin cortar tras 4 rondas: {pendientes}")
-        ctypes.windll.kernel32.Beep(500, 400)
+        sonido.pitar(500, 400)
         return False
 
     def aplicar(self, herramienta, celdas):
@@ -844,23 +1181,21 @@ class Audition:
     def sobre_parcelas_ya_elegido(self, solo_una=False, pasadas=None):
         """Recorre las 20 parcelas. Varias pasadas: lo que el juego ignora en una, lo toma la otra."""
         for _ in range(pasadas or CFG["pasadas"]):
-            for f in range(CFG["parcelas"]["filas"]):
-                for c in range(CFG["parcelas"]["columnas"]):
-                    self.clic(*self.parcela(f, c), rapido=True)
-                    if solo_una:
-                        return
+            for f, c in self.todas_las_celdas():
+                self.clic(*self.parcela(f, c), rapido=True)
+                if solo_una:
+                    return
 
     def celdas_marchitas(self):
         """Plantas marchitas = casi negras (65-70% de pixeles oscuros; sanas <12%, vacias ~0%)."""
         import numpy as np
         img = self.captura((0, 0, 1024, 768))
         marchitas = []
-        for f in range(CFG["parcelas"]["filas"]):
-            for c in range(CFG["parcelas"]["columnas"]):
-                cx, cy = self.parcela(f, c)
-                a = np.asarray(img.crop((cx - 24, cy - 26, cx + 24, cy + 22))).astype(int)
-                if float((a.max(axis=2) < 60).mean()) > CFG["marchita_umbral"]:
-                    marchitas.append((f, c))
+        for f, c in self.todas_las_celdas():
+            cx, cy = self.parcela(f, c)
+            a = np.asarray(img.crop((cx - 24, cy - 26, cx + 24, cy + 22))).astype(int)
+            if float((a.max(axis=2) < 60).mean()) > CFG["marchita_umbral"]:
+                marchitas.append((f, c))
         return marchitas
 
     def refrescar_jardin(self):
@@ -1045,7 +1380,7 @@ class Audition:
                 resto = [k for k in maduras if est[k] != "vacia"]
                 if resto:
                     log(f"AVISO: no pude vaciar {resto} tras 3 rondas")
-                    ctypes.windll.kernel32.Beep(500, 400)
+                    sonido.pitar(500, 400)
         elif n["joven"] and not n["vacia"]:
             log(f"{n['joven']} plantas jovenes aun creciendo: no cosecho")
             return False
@@ -1074,7 +1409,7 @@ class Audition:
         n_par = len(self.todas_las_celdas())
         if total < n_par:
             log(f"AVISO: solo {total}/{n_par} parcelas con planta tras sembrar")
-            ctypes.windll.kernel32.Beep(500, 400)
+            sonido.pitar(500, 400)
         self.regar_por_burbujas()
         dormir(1.0)
         abono, _ = self.celdas_con_burbuja("abono")
@@ -1125,7 +1460,7 @@ def esperar_turno(minimo=None):
         dormir(0.5)
     for n in range(CFG["cuenta_regresiva"], 0, -1):
         revisar()
-        ctypes.windll.kernel32.Beep(880, 120)
+        sonido.pitar(880, 120, "cuenta")
         log(f"Empiezo en {n}... (no muevas el mouse; F12 para cancelar)")
         dormir(1)
 
@@ -1136,6 +1471,8 @@ def rafaga(a, semilla, listo_en):
     try:
         return _rafaga(a, semilla, listo_en)
     except PantallaDesconocida as e:
+        if a.reingresar():
+            return False
         ahora = time.time()
         if ahora - getattr(a, "_ult_alarma", 0) > 60:
             log(f"{e} Espero a que vuelvas a iniciar sesion / entrar al juego.")
@@ -1165,6 +1502,8 @@ def _rafaga(a, semilla, listo_en):
                 esperar_turno()
                 primera = False
             a.localizar()
+            if a.cerrar_avisos():
+                dormir(1.0)
             ok, dif = a.en_secret_garden()
             if not ok:
                 ok = a.navegar_a_secret_garden()
@@ -1222,6 +1561,11 @@ def ciclo(args):
         log(f"Modo alternar. Patron: {patron}")
     if por_horario:
         log(f"Modo horario: {CFG['horario']}; ahora toca {patron[0]}")
+    for nombre_flag in ("cosechar_ya.flag", "reiniciar_cuenta.flag"):
+        ruta_flag = os.path.join(AQUI, nombre_flag)
+        if os.path.exists(ruta_flag) and time.time() - os.path.getmtime(ruta_flag) > 120:
+            os.remove(ruta_flag)
+            log(f"Orden vieja descartada al arrancar ({nombre_flag}): se dio con el programa parado")
     if os.path.exists(os.path.join(AQUI, "cosechar_ya.flag")):
         a.forzar_madura = True
         listo_en = None
@@ -1237,11 +1581,36 @@ def ciclo(args):
     def esperar(seg):
         """Espera en trozos de 1 s y se interrumpe si llega la hora en punto."""
         fin = time.time() + seg
-        while time.time() < fin and not toca_visita():
+        while (time.time() < fin and not toca_visita()
+               and not os.path.exists(os.path.join(AQUI, "cosechar_ya.flag"))
+               and not os.path.exists(os.path.join(AQUI, "reiniciar_cuenta.flag"))):
             dormir(1)
+
+    flag_ya = os.path.join(AQUI, "cosechar_ya.flag")
+    flag_reinicio = os.path.join(AQUI, "reiniciar_cuenta.flag")
+
+    def guardar_estado(sig):
+        if not args.seco:
+            pl = getattr(a, "plantado_en", {})
+            with open(estado, "w", encoding="utf-8") as f:
+                json.dump({"semilla": sig, "listo_en": listo_en, "indice": indice,
+                           "plantado": {f"{k[0]},{k[1]}": v for k, v in pl.items()}}, f)
 
     while True:
         desarmar()
+        aj = ajustes.leer()
+        if os.path.exists(flag_ya) and not getattr(a, "forzar_madura", False):
+            a.forzar_madura = True
+            listo_en = None
+            log("Orden desde la interfaz: 'cortar ahora' (las plantas se tratan como maduras)")
+        if os.path.exists(flag_reinicio):
+            os.remove(flag_reinicio)
+            mins = aj["minutos"].get(a.semilla_actual, CFG["tiempos_min"].get(a.semilla_actual, 7))
+            listo_en = time.time() + mins * 60
+            a.plantado_en = {}
+            guardar_estado(a.semilla_actual)
+            log(f"Orden desde la interfaz: reinicio la cuenta de {a.semilla_actual}: {mins} min desde ahora "
+                f"({time.strftime('%H:%M:%S', time.localtime(listo_en))})")
         a.reloj_cumplido = bool(listo_en) and time.time() >= listo_en
         if toca_visita():
             vis["hora"] = time.localtime().tm_hour
@@ -1253,8 +1622,12 @@ def ciclo(args):
                 a.recuperar(str(e))
                 a.ir_a("secret")
             continue
-        while listo_en and time.time() < listo_en and not toca_visita():   # aun no toca
+        while (listo_en and time.time() < listo_en + ajustes.leer()["margen_seg"]
+               and not toca_visita() and not os.path.exists(flag_ya)
+               and not os.path.exists(flag_reinicio)):                    # aun no toca
             dormir(1)
+        if os.path.exists(flag_ya) or os.path.exists(flag_reinicio):
+            continue
         if toca_visita():
             continue
         # esperar sin molestar: solo se mira la pantalla (sin mouse, sin foco, sin pitidos)
@@ -1282,7 +1655,7 @@ def ciclo(args):
             n += 1
             indice += 1
             a.semilla_actual = siguiente
-            t_semilla = CFG["tiempos_min"][siguiente] * 60 + CFG["margen_seg"]
+            t_semilla = aj["minutos"].get(siguiente, CFG["tiempos_min"][siguiente]) * 60 + CFG["margen_seg"]
             listo_en = getattr(a, "t_siembra", time.time()) + t_semilla
             plantado = getattr(a, "plantado_en", {})
             if plantado and siguiente in CFG["madurez_por_reloj"]:
@@ -1297,8 +1670,10 @@ def ciclo(args):
             if args.ciclos and n >= args.ciclos:
                 return
         else:
-            log("Nada que hacer ahora; vuelvo a mirar en 30 s")
-            esperar(30)
+            espera = aj["intervalo_seg"] if aj["revision_activa"] else max(aj["intervalo_seg"], 180)
+            log(f"Nada que hacer ahora; vuelvo a mirar en {espera} s"
+                + ("" if aj["revision_activa"] else " (revision activa apagada)"))
+            esperar(espera)
 
 
 def cuidar(args):
@@ -1348,26 +1723,47 @@ def una_parcela(args):
     log(f"Captura guardada en {ruta}")
 
 
+def capturar_ref(args):
+    """Guarda la zona de pantalla actual como referencia del reingreso (login, items_nuevos, aviso_circulo)."""
+    a = Audition()
+    for n in range(5, 0, -1):
+        log(f"Guardo la referencia '{args.nombre}' en {n} s (deja visible esa pantalla del juego)")
+        time.sleep(1)
+    h = user32.FindWindowW(None, "Audition")
+    if not h:
+        raise Detenido("No encuentro la ventana de Audition")
+    p = wintypes.POINT(0, 0)
+    user32.ClientToScreen(h, ctypes.byref(p))
+    a.hwnd, a.ox, a.oy = h, p.x, p.y
+    archivo, caja = Audition.REF_REINGRESO[args.nombre]
+    os.makedirs(os.path.join(AQUI, "referencias"), exist_ok=True)
+    a.captura(caja).save(os.path.join(AQUI, "referencias", archivo))
+    log(f"Referencia '{args.nombre}' guardada ({archivo})")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("modo", choices=["ciclo", "una-parcela", "cuidar", "abonar"])
+    ap.add_argument("modo", choices=["ciclo", "una-parcela", "cuidar", "abonar", "capturar-ref"])
+    ap.add_argument("--nombre", choices=["login", "items_nuevos", "aviso_circulo", "mercado"], default="login")
     ap.add_argument("--semilla", choices=["romero", "menta_verde", "alternar", "horario"], default="romero")
     ap.add_argument("--seco", action="store_true", help="mueve el mouse pero no hace clic")
     ap.add_argument("--ciclos", type=int, default=0, help="0 = infinito")
     ap.add_argument("--seguir", action="store_true", help="tras 'cuidar', continuar con el ciclo automatico")
     args = ap.parse_args()
-    asegurar_admin()
+    if args.modo != "capturar-ref":
+        asegurar_admin()
     hwnd_consola = ctypes.windll.kernel32.GetConsoleWindow()
     if hwnd_consola:
         user32.ShowWindow(hwnd_consola, 6)   # minimizar: que no tape el juego
     try:
-        {"ciclo": ciclo, "una-parcela": una_parcela, "cuidar": cuidar, "abonar": abonar}[args.modo](args)
+        {"ciclo": ciclo, "una-parcela": una_parcela, "cuidar": cuidar, "abonar": abonar,
+         "capturar-ref": capturar_ref}[args.modo](args)
         if args.modo == "cuidar" and args.seguir:
             ciclo(args)
     except Detenido as e:
         log(f"DETENIDO: {e}")
         for _ in range(3):
-            ctypes.windll.kernel32.Beep(400, 300)
+            sonido.pitar(400, 300)
         try:
             input("Enter para cerrar...")
         except (EOFError, OSError):
