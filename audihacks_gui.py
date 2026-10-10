@@ -127,6 +127,8 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("dark")
         self.title("AudiHacks")
         self.geometry("610x415")
+        self._ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audihacks.ico")
+        self.after(250, self._poner_icono)      # customtkinter pone su icono propio al abrir: se cambia despues
         self.minsize(590, 400)
         self.proc = None
         self.corriendo_cache, self.ultima_consulta = False, 0
@@ -396,6 +398,12 @@ class App(ctk.CTk):
         sonido.pitar(600, 220, forzar=True)
 
     # --- cuenta ---
+    def _poner_icono(self):
+        try:
+            self.iconbitmap(self._ico)
+        except Exception:
+            pass
+
     def detectar_lanzador(self):
         ruta = ajustes.detectar_lanzador()
         self.e_lanz.delete(0, "end")

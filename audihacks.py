@@ -653,12 +653,13 @@ class Audition:
         user32.GetCursorPos(ctypes.byref(cur))
         tx, ty = self.ox + cx, self.oy + cy
         dist = max(abs(tx - cur.x), abs(ty - cur.y))
-        pasos = max(4, min(25, dist // 18))
+        turbo = rapido and getattr(self, "_turbo_drops", False)      # solo mientras se levantan sacos
+        pasos = max(2, min(8, dist // 45)) if turbo else max(4, min(25, dist // 18))
         desarmar()                                   # mientras nos movemos nosotros, no vigilar
         for i in range(1, pasos + 1):
             revisar()
             user32.SetCursorPos(cur.x + (tx - cur.x) * i // pasos, cur.y + (ty - cur.y) * i // pasos)
-            time.sleep(0.010)
+            time.sleep(0.005 if turbo else 0.010)
         global _ESPERADO
         _ESPERADO = (tx, ty)
         dormir(CFG["asentar_rapido"] if rapido else 0.3)
@@ -675,7 +676,9 @@ class Audition:
             _PULSANDO = False
 
     def hay_dialogo(self):
-        ref = Image.open(os.path.join(AQUI, "referencias", "dialogo_adquirir.png")).convert("RGB")
+        ref = getattr(self, "_ref_dialogo", None)
+        if ref is None:
+            ref = self._ref_dialogo = Image.open(os.path.join(AQUI, "referencias", "dialogo_adquirir.png")).convert("RGB")
         vivo = self.captura((380, 245, 650, 300))
         return sum(ImageStat.Stat(ImageChops.difference(ref, vivo)).mean) / 3 < CFG["umbral_dialogo"]
 
@@ -1026,6 +1029,7 @@ class Audition:
             objetivo = self.sacos_presentes()
             log(f"Sacos a la vista: {len(objetivo)} de {len(self.todas_las_celdas())} parcelas")
         restantes = []
+        self._turbo_drops = True
         asentar_previo = CFG["asentar_rapido"]
         CFG["asentar_rapido"] = min(asentar_previo, 0.03)          # mover mas ligero mientras se recogen drops
         for pasada in range(1, 7):
@@ -1065,6 +1069,7 @@ class Audition:
             log(f"Pasada {pasada}: aun se ven sacos en {len(restantes)} parcelas {restantes}")
             objetivo = restantes
         CFG["asentar_rapido"] = asentar_previo
+        self._turbo_drops = False
         self._items_suelo = len(restantes)
         if restantes:
             log(f"AVISO: quedan sacos en {len(restantes)} parcelas tras 6 pasadas")
@@ -1515,6 +1520,8 @@ def _rafaga(a, semilla, listo_en):
     primera = True
     limites = 0
     for intento in range(1, 8):
+        if os.path.exists(os.path.join(AQUI, "reiniciar_cuenta.flag")):
+            return False                          # orden de la interfaz: que el ciclo la atienda antes de seguir cortando
         try:
             if a.manejar_mensajes():
                 primera = False                   # tras un cuadro, esperar turno otra vez abajo
@@ -1642,10 +1649,23 @@ def ciclo(args):
                 a.recuperar(str(e))
                 a.ir_a("secret")
             continue
+        t_mira, vacias_vistas = 0, 0
         while (listo_en and time.time() < listo_en + ajustes.leer()["margen_seg"]
                and not toca_visita() and not os.path.exists(flag_ya)
                and not os.path.exists(flag_reinicio)):                    # aun no toca
             dormir(1)
+            if not args.seco and time.time() - t_mira >= 40:
+                # mirada silenciosa (sin mouse): si hay parcelas vacias en dos miradas seguidas, no esperar al reloj
+                t_mira = time.time()
+                try:
+                    est_w = a.mirar_pasivo()
+                except Exception:
+                    est_w = None
+                if est_w is not None:
+                    vacias_vistas = vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
+                    if vacias_vistas >= 2:
+                        log(f"Veo {a.contar(est_w)['vacia']} parcelas vacias mientras espero: las atiendo sin esperar el reloj")
+                        break
         if os.path.exists(flag_reinicio) or (os.path.exists(flag_ya) and not getattr(a, "forzar_madura", False)):
             continue                      # orden nueva sin tomar: volver arriba a atenderla
         a.reloj_cumplido = bool(listo_en) and time.time() >= listo_en
