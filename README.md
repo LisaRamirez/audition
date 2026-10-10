@@ -7,15 +7,16 @@ Si el juego se cae o el servidor deja de responder, **cierra el juego y vuelve a
 Usa el mouse real (el juego ignora los clics enviados a la ventana), por eso corre **como administrador**
 (Audition corre elevado).
 
-## Instalación (una sola vez)
+## Instalación (un solo paso)
 
-1. Instalar **Python 3.12** desde python.org, marcando **«Add Python to PATH»**.
-2. Copiar la carpeta de AudiHacks al PC (o `git clone`) y ejecutar **`instalar.bat`**.
-   - Instala las librerías.
-   - Pide **una vez** el aviso de administrador para crear las tareas que permiten iniciar y detener el programa
-     sin volver a pedir permisos.
-3. Abrir el juego, iniciar sesión y dejarlo en el **Secret Garden**. Ventana de **1024×768**, idioma español.
-4. Abrir **`iniciar_interfaz.bat`** (acepta el aviso de administrador).
+1. Descargar la carpeta (`git clone https://github.com/LisaRamirez/audition.git`, o el ZIP y descomprimirlo).
+2. Doble clic en **`instalar.bat`**. Hace todo solo:
+   - instala Python 3.12 si no lo tienes (con winget) y las librerías,
+   - crea las tareas de iniciar/detener (pide el aviso de administrador **una vez**),
+   - deja el acceso **«AudiHacks»** con su icono en el Escritorio y abre la interfaz.
+3. Tener el juego abierto, con la sesión iniciada, en el **Secret Garden** (ventana 1024×768, español).
+
+Después se abre siempre con el acceso **«AudiHacks»** del Escritorio (acepta el aviso de administrador).
 
 ## Primer uso (todo desde la interfaz)
 
