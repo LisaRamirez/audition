@@ -348,6 +348,8 @@ class Audition:
         fin = time.time() + max_seg
         while time.time() < fin:
             dormir(1.0)
+            if self.cerrar_avisos():                 # un cuadro de error con boton circular tapa y bloquea los clics
+                continue
             p = self.detectar_pantalla()
             if p and p != distinta_de:
                 dormir(1.5)
@@ -360,6 +362,8 @@ class Audition:
         self._sin_vigilar = True
         try:
             for _ in range(8):
+                if self.cerrar_avisos():             # cualquier cuadro con boton circular: se acepta siempre
+                    dormir(1.0)
                 p = self.detectar_pantalla()
                 if p == "secret":
                     return True
@@ -403,6 +407,21 @@ class Audition:
         ref = Image.open(ruta).convert("RGB")
         dif = sum(ImageStat.Stat(ImageChops.difference(ref, self.captura(caja))).mean) / 3
         return dif < (umbral or CFG["reingreso"]["umbral"])
+
+    def guardar_captura(self, motivo):
+        """Guarda una captura del juego en observacion/pantallas/ (maximo una cada 3 min) para ver que cartel
+        o pantalla nueva bloquea al programa."""
+        if time.time() - getattr(self, "_ult_foto", 0) < 180:
+            return
+        self._ult_foto = time.time()
+        try:
+            carpeta = os.path.join(AQUI, "observacion", "pantallas")
+            os.makedirs(carpeta, exist_ok=True)
+            ruta = os.path.join(carpeta, f"{time.strftime('%d%H%M%S')}_{motivo}.png")
+            self.captura((0, 0, 1024, 768)).save(ruta)
+            log(f"Captura guardada para revisar: {os.path.relpath(ruta, AQUI)}")
+        except Exception as e:                                  # la captura nunca debe romper el ciclo
+            log(f"No pude guardar la captura ({e})")
 
     def buscar_boton_circulo(self):
         """Busca el boton circular de los cuadros azules del juego en la zona central, sin importar donde caiga
@@ -561,8 +580,8 @@ class Audition:
                 h_juego = 0
             except Reintentar:                       # el juego existe pero no logre ponerlo al frente
                 return False
-        ruta = CFG["reingreso"].get("lanzador", "")
-        desde_cero = not h_juego and not h_lanz and os.path.exists(ruta)
+        ruta = ajustes.ruta_lanzador(CFG["reingreso"].get("lanzador", ""))
+        desde_cero = not h_juego and not h_lanz and bool(ruta) and os.path.exists(ruta)
         if not forzar and not en_login and not (h_lanz and not h_juego) and not desde_cero:
             return False       # solo: login, juego cerrado con lanzador visible, o todo cerrado
         if len(self._reingresos) >= 4:
@@ -1086,7 +1105,7 @@ class Audition:
         if getattr(self, "semilla_actual", "") in CFG["madurez_por_reloj"]:
             # esta planta no se distingue bien por color: madura SOLO cuando se cumple su reloj
             cumplido = getattr(self, "reloj_cumplido", False)     # respaldo si no se la hora de siembra
-            t_plan = CFG["tiempos_min"][self.semilla_actual] * 60
+            t_plan = ajustes.leer()["minutos"].get(self.semilla_actual, CFG["tiempos_min"][self.semilla_actual]) * 60
             plantado = getattr(self, "plantado_en", {})
             ahora = time.time()
             for k, v in res.items():
@@ -1473,6 +1492,7 @@ def rafaga(a, semilla, listo_en):
     except PantallaDesconocida as e:
         if a.reingresar():
             return False
+        a.guardar_captura("pantalla_desconocida")
         ahora = time.time()
         if ahora - getattr(a, "_ult_alarma", 0) > 60:
             log(f"{e} Espero a que vuelvas a iniciar sesion / entrar al juego.")
@@ -1607,7 +1627,7 @@ def ciclo(args):
             os.remove(flag_reinicio)
             mins = aj["minutos"].get(a.semilla_actual, CFG["tiempos_min"].get(a.semilla_actual, 7))
             listo_en = time.time() + mins * 60
-            a.plantado_en = {}
+            a.plantado_en = {k: time.time() for k in a.todas_las_celdas()}
             guardar_estado(a.semilla_actual)
             log(f"Orden desde la interfaz: reinicio la cuenta de {a.semilla_actual}: {mins} min desde ahora "
                 f"({time.strftime('%H:%M:%S', time.localtime(listo_en))})")
@@ -1626,8 +1646,9 @@ def ciclo(args):
                and not toca_visita() and not os.path.exists(flag_ya)
                and not os.path.exists(flag_reinicio)):                    # aun no toca
             dormir(1)
-        if os.path.exists(flag_ya) or os.path.exists(flag_reinicio):
-            continue
+        if os.path.exists(flag_reinicio) or (os.path.exists(flag_ya) and not getattr(a, "forzar_madura", False)):
+            continue                      # orden nueva sin tomar: volver arriba a atenderla
+        a.reloj_cumplido = bool(listo_en) and time.time() >= listo_en
         if toca_visita():
             continue
         # esperar sin molestar: solo se mira la pantalla (sin mouse, sin foco, sin pitidos)
@@ -1650,7 +1671,17 @@ def ciclo(args):
                     continue
         a._p_maduro = None
         siguiente = semilla_por_horario() if por_horario else patron[indice % len(patron)]
-        hizo = rafaga(a, siguiente, listo_en)
+        try:
+            hizo = rafaga(a, siguiente, listo_en)
+        except Detenido as e:
+            if emergencia():
+                raise                              # F12: parada de emergencia de verdad
+            # un fallo recuperable (p. ej. el selector de canal no respondio): no morir, esperar y reintentar
+            log(f"Fallo recuperable: {e}. Espero 60 s y reintento")
+            a.guardar_captura("fallo")
+            sonido.pitar(500, 400)
+            esperar(60)
+            continue
         if hizo:
             n += 1
             indice += 1

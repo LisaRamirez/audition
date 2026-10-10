@@ -263,9 +263,15 @@ class App(ctk.CTk):
         ctk.CTkButton(fc, text="Guardar cuenta", width=120, command=self.guardar_cuenta, **estilo_boton).pack(side="left")
         self.msg_cuenta = ctk.StringVar(value="")
         ctk.CTkLabel(fc, textvariable=self.msg_cuenta, font=F(10), text_color=VERDE).pack(side="left", padx=8)
-        ctk.CTkLabel(t, text="La contraseña se guarda cifrada con Windows (solo este usuario de este PC). "
-                             "Vacía = conserva la guardada.", font=F(10), text_color=GRIS, wraplength=540,
-                     justify="left", anchor="w").pack(fill="x", pady=(4, 0))
+        fl = ctk.CTkFrame(t, fg_color=TARJETA)
+        fl.pack(fill="x", pady=(6, 0))
+        ctk.CTkLabel(fl, text="Lanzador (Patcher.exe)", font=F(10), text_color=GRIS).pack(side="left")
+        self.e_lanz = ctk.CTkEntry(fl, **estilo_entrada)
+        self.e_lanz.pack(side="left", fill="x", expand=True, padx=6)
+        self.e_lanz.insert(0, ajustes.leer().get("lanzador", ""))
+        ctk.CTkButton(fl, text="Detectar", width=70, command=self.detectar_lanzador, **estilo_boton).pack(side="left")
+        ctk.CTkLabel(t, text="Contraseña cifrada con Windows. Vacía = conserva la guardada.", font=F(10),
+                     text_color=GRIS, anchor="w").pack(fill="x", pady=(3, 0))
 
         # Sonido
         t = tabs.tab("Sonido")
@@ -390,7 +396,16 @@ class App(ctk.CTk):
         sonido.pitar(600, 220, forzar=True)
 
     # --- cuenta ---
+    def detectar_lanzador(self):
+        ruta = ajustes.detectar_lanzador()
+        self.e_lanz.delete(0, "end")
+        self.e_lanz.insert(0, ruta)
+        self.msg_cuenta.set("Lanzador detectado" if ruta else "No lo encontré: escribe la ruta de Patcher.exe")
+
     def guardar_cuenta(self):
+        datos_aj = dict(ajustes.leer())
+        datos_aj["lanzador"] = self.e_lanz.get().strip()
+        ajustes.guardar(datos_aj)
         try:
             cuenta.guardar(self.usuario.get().strip(), self.clave.get(), self.auto.get())
         except OSError as e:

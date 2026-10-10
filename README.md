@@ -1,24 +1,68 @@
 # AudiHacks
 
-Automatiza el **Secret Garden** de Audition: cortar lo maduro, sembrar, regar, abonar y levantar los drops.
-Usa el mouse real (el juego ignora clics enviados a la ventana) y por eso **debe ejecutarse como administrador**
+Automatiza el **Secret Garden** de Audition: corta lo maduro, siembra, riega, abona y levanta los drops.
+Si el juego se cae o el servidor deja de responder, **cierra el juego y vuelve a entrar solo**
+(lanzador → JUGAR → login → jardín).
+
+Usa el mouse real (el juego ignora los clics enviados a la ventana), por eso corre **como administrador**
 (Audition corre elevado).
 
-## Instalacion
-1. Instalar **Python 3.12** (python.org, marcar "Add Python to PATH").
-2. Ejecutar `instalar.bat`.
-3. Abrir el juego, iniciar sesion y dejarlo en el **Secret Garden** (ventana de 1024x768, idioma espanol).
-4. Ejecutar `iniciar_interfaz.bat` (acepta el aviso de administrador), elegir la planta y pulsar **Iniciar**.
+## Instalación (una sola vez)
 
-## Uso
-- **Detener:** boton Detener o tecla **F12** (para al instante).
-- Plantas: Romero (7 min), Menta Verde (23 min), "Alternar" (3 Romero + 1 Menta Verde) o "Por horario" (dia Menta Verde / noche Romero; horas en `config.json`).
-- Durante una rafaga no mover el mouse ni escribir. Si lo mueves, espera y retoma solo.
-- Si el servidor desconecta, avisa con alarma; no vuelve a iniciar sesion solo.
+1. Instalar **Python 3.12** desde python.org, marcando **«Add Python to PATH»**.
+2. Copiar la carpeta de AudiHacks al PC (o `git clone`) y ejecutar **`instalar.bat`**.
+   - Instala las librerías.
+   - Pide **una vez** el aviso de administrador para crear las tareas que permiten iniciar y detener el programa
+     sin volver a pedir permisos.
+3. Abrir el juego, iniciar sesión y dejarlo en el **Secret Garden**. Ventana de **1024×768**, idioma español.
+4. Abrir **`iniciar_interfaz.bat`** (acepta el aviso de administrador).
 
-## Calibracion
-Las posiciones (parcelas, herramientas, botones) estan en `config.json` y son para una ventana de 1024x768.
-Si tu pantalla se ve distinta, hay que ajustarlas. Las imagenes de `referencias/` sirven para reconocer pantallas.
+## Primer uso (todo desde la interfaz)
+
+1. **Pestaña Cuenta:** escribe tu **ID de usuario** y tu **contraseña** y pulsa **Guardar cuenta**.
+   La contraseña se guarda cifrada con Windows, solo para tu usuario de este PC, y no sale del PC.
+   - Marca **«Reingresar solo si me saca del juego»**.
+   - Pulsa **Detectar** junto a «Lanzador (Patcher.exe)» para que encuentre el lanzador de Audition.
+2. **Pestaña Referencias:** guarda las imágenes de reconocimiento **solo con la pantalla pedida a la vista**
+   (la interfaz pregunta antes de guardar):
+   - *Pantalla de login*: la que sale al abrir el juego, con el cuadro «Ingresar». **Hazlo una vez**, o la
+     primera vez que el juego te saque al login.
+   - *Panel de semillas*: el que se abre al pulsar el saquito de semillas.
+   - Los cuadros azules con botón circular («No hay respuesta del servidor», etc.) se reconocen solos.
+3. **Pestaña Parcelas:** marca las parcelas que plantaste tú a mano. El programa **no las toca**.
+4. Elige la planta y pulsa **Iniciar**.
+
+## Uso diario
+
+- **Iniciar / Detener** en la interfaz, o **F12** (parada de emergencia al instante).
+- Plantas: Romero (7 min), Menta Verde (23 min), «Alternar» (3 Romero + 1 Menta Verde) o «Por horario»
+  (día Menta Verde / noche Romero). El modo por horario y alternar necesitan abrir la interfaz como administrador.
+- La **Menta Verde** se ve igual joven que madura, así que corta **por reloj**: 23 minutos desde el último abono.
+  Si abonas o plantas a mano, usa **Reiniciar cuenta** (pestaña Espera).
+- **Pestaña Espera:** revisar o no la pantalla mientras espera, margen extra, minutos de cada planta y las órdenes
+  **Cortar ahora** y **Reiniciar cuenta** (solo funcionan con el programa en marcha).
+- **Pestaña Sonido:** avisos con volumen ajustable.
+- Cerrar la ventana **no detiene** el programa; usa **Detener**.
+- Mientras corre una ráfaga **no muevas el mouse ni escribas**: si lo haces, espera y retoma solo.
+
+## Si algo falla
+
+- El registro (`audihacks.log`, pestaña Registro) anota todo lo que hace.
+- Si se queda en una pantalla que no reconoce guarda una captura en `observacion/pantallas/`.
+- Al caerse el servidor tarda unos minutos en volver a entrar; es normal.
+
+## Calibración (si tu jardín se ve distinto)
+
+Las posiciones (parcelas, herramientas, botones) están en `config.json` y son para una ventana de 1024×768
+vista desde el mismo lado. Si el jardín de la otra persona se ve de otro lado o con otro tamaño, hay que ajustar
+`parcelas`, `herramientas`, `semillas` y las posiciones de `reingreso`. Las imágenes de `referencias/` sirven para
+reconocer las pantallas; algunas pueden necesitar volver a guardarse con la pantalla de esa persona.
+
+## Privacidad
+
+Tus datos **no se suben**: la cuenta (`cuenta.dat`), los ajustes (`ajustes.json`), el sonido (`sonido.json`),
+el registro y las capturas están en `.gitignore`.
 
 ## Aviso
-Automatizar el juego puede ir contra sus normas. Usalo bajo tu propio riesgo.
+
+Automatizar el juego puede ir contra sus normas. Úsalo bajo tu propio riesgo.
