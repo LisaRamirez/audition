@@ -78,6 +78,24 @@ vista desde el mismo lado. Si el jardín de la otra persona se ve de otro lado o
 `parcelas`, `herramientas`, `semillas` y las posiciones de `reingreso`. Las imágenes de `referencias/` sirven para
 reconocer las pantallas; algunas pueden necesitar volver a guardarse con la pantalla de esa persona.
 
+## Tu contraseña (importante)
+
+**La contraseña NO viene en el programa ni en este repositorio**, porque es público. Cada persona la escribe
+en su propio PC, en la pestaña **Cuenta** de la interfaz:
+
+- Se guarda **cifrada con Windows** (solo la puede leer tu usuario de ese PC) en el archivo local `cuenta.dat`.
+- `cuenta.dat` está en `.gitignore`: **nunca se sube a GitHub**. Si copias la carpeta a otro PC, la contraseña no viaja y
+  hay que escribirla de nuevo.
+- Nunca escribas tu contraseña dentro de `config.json` ni de ningún `.py`.
+- Si no quieres que se guarde, deja la cuenta vacía y desmarca **«Reingresar solo si me saca del juego»**: el
+  programa seguirá cortando y sembrando, pero tendrás que volver a entrar tú si se desconecta.
+
+## Reingreso automático
+
+Con la cuenta guardada y la casilla marcada, si el juego se desconecta («Desconectado del servidor» o «No hay respuesta
+del servidor») el programa cierra el juego, abre el lanzador, pulsa **JUGAR**, escribe tu usuario y contraseña, cierra el
+cartel **«Items nuevos»** (marca «Esconder por hoy») y vuelve solo al **Secret Garden**.
+
 ## Privacidad
 
 Tus datos **no se suben**: la cuenta (`cuenta.dat`), los ajustes (`ajustes.json`), el sonido (`sonido.json`),
