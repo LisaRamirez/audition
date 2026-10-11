@@ -1,11 +1,30 @@
-# AudiHacks
+<p align="center">
+  <img src="assets/icono.png" width="120" alt="AudiHacks">
+</p>
 
-Automatiza el **Secret Garden** de Audition: corta lo maduro, siembra, riega, abona y levanta los drops.
-Si el juego se cae o el servidor deja de responder, **cierra el juego y vuelve a entrar solo**
-(lanzador → JUGAR → login → jardín).
+<h1 align="center">AudiHacks</h1>
 
-Usa el mouse real (el juego ignora los clics enviados a la ventana), por eso corre **como administrador**
-(Audition corre elevado).
+<p align="center">
+  <b>Tu Secret Garden de Audition, trabajando solo.</b><br>
+  Corta, siembra, riega, abona y levanta los drops sin que muevas un dedo.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-7c3aed?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-ec4899?logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/interfaz-oscura-111827" alt="Interfaz oscura">
+</p>
+
+---
+
+## Qué hace
+
+- **Cosecha a tiempo:** corta cada planta cuando madura, siembra Romero o Menta Verde, la riega y la abona.
+- **Drops rápidos:** levanta solo los sacos que hay, sin perder tiempo en parcelas vacías.
+- **Se recupera solo:** si el juego se cae o sale «No hay respuesta del servidor», cierra el juego y vuelve a entrar
+  (lanzador → JUGAR → login → jardín). Acepta los cuadros con botón circular.
+- **Respeta lo tuyo:** no toca las parcelas que marques como plantadas a mano.
+- **Interfaz compacta:** negra con detalles morados y rosas, con cuenta regresiva, totales, horas trabajadas y sonido.
 
 ## Instalación (un solo paso)
 
