@@ -365,6 +365,13 @@ class Audition:
                 if self.cerrar_avisos():             # cualquier cuadro con boton circular: se acepta siempre
                     dormir(1.0)
                 p = self.detectar_pantalla()
+                for _ in range(15):                      # la pantalla puede estar cargando (tras entrar): dar hasta 30 s
+                    if p is not None:
+                        break
+                    dormir(2.0)
+                    if self.cerrar_avisos():
+                        dormir(1.0)
+                    p = self.detectar_pantalla()
                 if p == "secret":
                     return True
                 if p is None:
@@ -438,12 +445,17 @@ class Audition:
 
     def hay_error_servidor(self):
         """Cuadro azul 'No hay respuesta del servidor' (el juego perdio la conexion)."""
-        ruta = os.path.join(AQUI, "referencias", "texto_error_servidor.png")
-        if not os.path.exists(ruta):
-            return False
         zx0, zy0, zx1, zy1 = 250, 250, 780, 520
-        dif, _ = buscar_plantilla(self.captura((zx0, zy0, zx1, zy1)), Image.open(ruta))
-        return dif <= CFG["reingreso"].get("umbral_error_servidor", 14)
+        zona = None
+        for nombre in ("texto_error_servidor.png", "texto_desconectado.png"):     # 'No hay respuesta' / 'Desconectado'
+            ruta = os.path.join(AQUI, "referencias", nombre)
+            if not os.path.exists(ruta):
+                continue
+            zona = zona or self.captura((zx0, zy0, zx1, zy1))
+            dif, _ = buscar_plantilla(zona, Image.open(ruta))
+            if dif <= CFG["reingreso"].get("umbral_error_servidor", 14):
+                return True
+        return False
 
     def cerrar_juego_y_reingresar(self):
         """Pierde el servidor: se cierra el juego del todo (no sirve volver con la sesion rota) y se entra de cero."""
@@ -482,6 +494,10 @@ class Audition:
         for nombre, punto in (("items_nuevos", r["cerrar_items"]), ("mercado", r["cerrar_mercado"])):
             if self.coincide(nombre):
                 log(f"Cartel '{nombre}' detectado: lo cierro")
+                if nombre == "items_nuevos" and r.get("esconder_items"):
+                    self.mover(*r["esconder_items"])          # marca 'Esconder por hoy' para que no vuelva a salir
+                    self._pulsar()
+                    dormir(0.5)
                 self.mover(*punto)
                 self._pulsar()
                 dormir(1.0)
@@ -837,7 +853,7 @@ class Audition:
         return sorted(set(ok)), mal
 
     def limpiar_desalineadas(self):
-        """Corta SOLO las plantitas que quedaron fuera de la cuadrícula (las buenas no se tocan)."""
+        """Corta SOLO las plantitas que quedaron fuera de la cuadrÃ­cula (las buenas no se tocan)."""
         for ronda in range(1, 4):
             _, mal = self.celdas_con_burbuja()
             if not mal:
@@ -875,7 +891,7 @@ class Audition:
     def regar_por_burbujas(self):
         self.clic(*CFG["herramientas"]["regar"])
         dormir(0.5)
-        for ronda in range(1, 4):
+        for ronda in range(1, 7):
             self.vigilar()
             celdas, _ = self.celdas_con_burbuja()
             if not celdas:
@@ -886,7 +902,7 @@ class Audition:
             dormir(1.5)
         celdas, _ = self.celdas_con_burbuja()
         if celdas:
-            log(f"AVISO: quedan {len(celdas)} globos de agua tras 3 rondas")
+            log(f"AVISO: quedan {len(celdas)} globos de agua tras 6 rondas")
         return not celdas
 
     def pulsar_mantenido(self, segundos):
@@ -947,7 +963,7 @@ class Audition:
 
     def soltar_herramienta(self):
         """Clic derecho en terreno libre y COMPRUEBA que la herramienta se solto (si no, la hoz o la
-        estrella siguen tiñendo el jardin y las plantas vacias parecen marchitas)."""
+        estrella siguen tiÃ±endo el jardin y las plantas vacias parecen marchitas)."""
         for intento in range(3):
             self.mover(*CFG["terreno_libre"])
             user32.mouse_event(0x0008, 0, 0, 0, 0)
@@ -1113,6 +1129,16 @@ class Audition:
             t_plan = ajustes.leer()["minutos"].get(self.semilla_actual, CFG["tiempos_min"][self.semilla_actual]) * 60
             plantado = getattr(self, "plantado_en", {})
             ahora = time.time()
+            if not hasattr(self, "plantado_en"):
+                self.plantado_en = plantado = {}
+            vacias_vistas = self.__dict__.setdefault("_vistas_vacias", set())
+            for k, v in res.items():
+                if v == "vacia":
+                    vacias_vistas.add(k)
+                    plantado.pop(k, None)
+                elif v in ("joven", "madura") and k not in plantado and k in vacias_vistas:
+                    plantado[k] = ahora          # estaba vacia y ahora tiene planta (la puso alguien): empieza su reloj
+                    vacias_vistas.discard(k)
             for k, v in res.items():
                 if v in ("joven", "madura"):
                     inicio = plantado.get(k)
@@ -1370,6 +1396,12 @@ class Audition:
             if n["joven"] and espera < CFG["espera_maduracion_seg"]:
                 log(f"{len(maduras)} maduras pero aun hay {n['joven']} jovenes: espero (llevo {espera:.0f} s)")
                 return False
+            if n["joven"] and CFG.get("sincronizar_jardin", True):
+                # pasado el margen, lo que aun esta joven se corta junto con lo maduro: asi las 20 se vuelven a
+                # sembrar a la vez y maduran juntas (cortar en tandas deja el jardin desfasado para siempre)
+                jovenes = [k for k, v in est.items() if v == "joven"]
+                log(f"Sincronizo el jardin: corto tambien {len(jovenes)} jovenes para sembrar todo junto")
+                maduras = maduras + jovenes
             self.mover(*CFG["terreno_libre"])
             dormir(0.5)
             con_sacos = self.sacos_presentes()
@@ -1429,6 +1461,7 @@ class Audition:
         if faltan:
             self.reparar_celdas(faltan, semilla)
             celdas, mal = self.celdas_con_burbuja("agua")
+        self._anotar_siembra(semilla, celdas or vacias)    # ya hay planta: apuntar la hora YA, por si algo me interrumpe
         total = len(celdas) + previas
         n_par = len(self.todas_las_celdas())
         if total < n_par:
@@ -1438,13 +1471,29 @@ class Audition:
         dormir(1.0)
         abono, _ = self.celdas_con_burbuja("abono")
         self.abonar_en(abono if abono else celdas)   # sin globo visible: abona las recien sembradas
-        self.t_siembra = time.time()          # la planta madura 7 min despues de terminar de cuidarla
-        if not hasattr(self, "plantado_en"):
-            self.plantado_en = {}
-        for k in (celdas or vacias):
-            self.plantado_en[k] = self.t_siembra
+        self._anotar_siembra(semilla, celdas or vacias)    # hora definitiva: tras regar y abonar
         self.recoger_drops()                  # mientras crecen, sin retrasar el reloj
         return True
+
+    def _anotar_siembra(self, semilla, celdas):
+        """Apunta la hora de siembra de esas parcelas y la guarda en estado.json en el acto: si el programa se
+        interrumpe o se reinicia, nunca queda una hora vieja que haga cortar plantas recien sembradas."""
+        self.t_siembra = time.time()
+        self.semilla_actual = semilla
+        if not hasattr(self, "plantado_en"):
+            self.plantado_en = {}
+        for k in celdas:
+            self.plantado_en[k] = self.t_siembra
+        if self.seco:
+            return
+        t = ajustes.leer()["minutos"].get(semilla, CFG["tiempos_min"][semilla]) * 60 + CFG["margen_seg"]
+        listo = min(self.plantado_en.values()) + t
+        try:
+            with open(os.path.join(AQUI, "estado.json"), "w", encoding="utf-8") as f:
+                json.dump({"semilla": semilla, "listo_en": listo, "indice": 1,
+                           "plantado": {f"{k[0]},{k[1]}": v for k, v in self.plantado_en.items()}}, f)
+        except OSError:
+            pass
 
     def reparar_celdas(self, faltan, semilla):
         """Parcelas que no aceptaron semilla: probablemente hay una planta muerta. Resucitar, cortar
@@ -1490,7 +1539,7 @@ def esperar_turno(minimo=None):
 
 
 def rafaga(a, semilla, listo_en):
-    """Una ráfaga. Los problemas recuperables (cuadros de Windows, pantalla desconocida, demasiadas
+    """Una rÃ¡faga. Los problemas recuperables (cuadros de Windows, pantalla desconocida, demasiadas
     interferencias) NO matan el programa: se avisa, se espera y se vuelve a intentar."""
     try:
         return _rafaga(a, semilla, listo_en)
@@ -1632,6 +1681,11 @@ def ciclo(args):
             log("Orden desde la interfaz: 'cortar ahora' (las plantas se tratan como maduras)")
         if os.path.exists(flag_reinicio):
             os.remove(flag_reinicio)
+            a.forzar_madura = False                  # "reiniciar cuenta" manda sobre un "cortar ahora" anterior
+            try:
+                os.remove(flag_ya)
+            except OSError:
+                pass
             mins = aj["minutos"].get(a.semilla_actual, CFG["tiempos_min"].get(a.semilla_actual, 7))
             listo_en = time.time() + mins * 60
             a.plantado_en = {k: time.time() for k in a.todas_las_celdas()}
@@ -1649,7 +1703,7 @@ def ciclo(args):
                 a.recuperar(str(e))
                 a.ir_a("secret")
             continue
-        t_mira, vacias_vistas = 0, 0
+        t_mira, vacias_vistas, hay_cuadro = 0, 0, False
         while (listo_en and time.time() < listo_en + ajustes.leer()["margen_seg"]
                and not toca_visita() and not os.path.exists(flag_ya)
                and not os.path.exists(flag_reinicio)):                    # aun no toca
@@ -1661,8 +1715,24 @@ def ciclo(args):
                     est_w = a.mirar_pasivo()
                 except Exception:
                     est_w = None
+                try:
+                    if getattr(a, "hwnd", 0) and (a.hay_error_servidor() or a.buscar_boton_circulo()):
+                        log("Cuadro azul del juego (error / desconexion) mientras espero: lo atiendo ahora")
+                        hay_cuadro = True
+                        break
+                except Exception:
+                    pass
+                if est_w is None and getattr(a, "hwnd", 0):
+                    try:
+                        otra = a.detectar_pantalla()
+                    except Exception:
+                        otra = None
+                    if otra in ("canales", "ciudad", "entrada", "couple"):
+                        log(f"Estoy en la pantalla '{otra}', no en el jardin: voy al Secret Garden sin esperar")
+                        hay_cuadro = True
+                        break
                 if est_w is not None:
-                    vacias_vistas = vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
+                    vacias_vistas =vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
                     if vacias_vistas >= 2:
                         log(f"Veo {a.contar(est_w)['vacia']} parcelas vacias mientras espero: las atiendo sin esperar el reloj")
                         break
@@ -1672,7 +1742,7 @@ def ciclo(args):
         if toca_visita():
             continue
         # esperar sin molestar: solo se mira la pantalla (sin mouse, sin foco, sin pitidos)
-        est = None if args.seco else a.mirar_pasivo()
+        est = None if (args.seco or hay_cuadro) else a.mirar_pasivo()
         if est is not None:
             c = a.contar(est)
             agua = a.celdas_con_burbuja("agua")[0]

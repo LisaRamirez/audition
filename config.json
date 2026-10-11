@@ -5,7 +5,7 @@
   },
   "margen_seg": 0,
   "segundos_sin_tocar": 4,
-  "cuenta_regresiva": 5,
+  "cuenta_regresiva": 2,
   "umbral_cartel": 30,
   "pausa_clic_min": 0.15,
   "pausa_clic_max": 0.25,
@@ -98,7 +98,7 @@
     "menta": 64
   },
   "maduro_brillante": 0.1,
-  "espera_maduracion_seg": 50,
+  "espera_maduracion_seg": 60,
   "drops": {
     "x0": 370,
     "y0": 215,
@@ -142,14 +142,14 @@
     922,
     714
   ],
-  "pausa_cosecha": 0.9,
+  "pausa_cosecha": 0.35,
   "tolerancia_mouse": 14,
   "cortar_desalineadas": false,
   "couple_visita": false,
   "visita_seg": 90,
   "visita_cada_seg": 5,
   "umbral_sin_herramienta": 12,
-  "asentar_cosecha": 0.35,
+  "asentar_cosecha": 0.18,
   "boton_aviso_maximo": [
     655,
     405
@@ -182,7 +182,8 @@
   ],
   "horario_por_defecto": "romero",
   "madurez_por_reloj": [
-    "menta_verde"
+    "menta_verde",
+    "romero"
   ],
   "reingreso": {
     "umbral": 22,
@@ -214,6 +215,10 @@
     "cerrar_mercado": [
       780,
       232
+    ],
+    "esconder_items": [
+      379,
+      664
     ]
   },
   "sonido": false
