@@ -212,7 +212,8 @@ class Audition:
         rc = wintypes.RECT()
         user32.GetClientRect(self.hwnd, ctypes.byref(rc))
         w, h = rc.right - rc.left, rc.bottom - rc.top
-        sw, sh = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        vx, vy = user32.GetSystemMetrics(76), user32.GetSystemMetrics(77)          # escritorio virtual: varios monitores
+        sw, sh = vx + user32.GetSystemMetrics(78), vy + user32.GetSystemMetrics(79)
         clave = (w, h, sw, sh, self.ox, self.oy)
         if getattr(self, "_tam_avisado", None) == clave:
             return
@@ -222,7 +223,7 @@ class Audition:
             log(f"AVISO: la ventana del juego mide {w}x{h}, no 1024x768: los clics caeran corridos. "
                 "Ejecuta arreglar_pantalla.bat (escala de Windows) y reabre el juego.")
             sonido.pitar(500, 400)
-        elif self.ox < 0 or self.oy < 0 or self.ox + 1024 > sw or self.oy + 768 > sh:
+        elif self.ox < vx or self.oy < vy or self.ox + 1024 > sw or self.oy + 768 > sh:
             log("AVISO: parte de la ventana del juego queda fuera de la pantalla: muevela para que se vea completa.")
 
     def captura(self, caja):
