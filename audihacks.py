@@ -204,6 +204,26 @@ class Audition:
         p = wintypes.POINT(0, 0)
         user32.ClientToScreen(self.hwnd, ctypes.byref(p))
         self.ox, self.oy = p.x, p.y
+        self._revisar_tamano()
+
+    def _revisar_tamano(self):
+        """Avisa (una vez) si la ventana del juego no mide 1024x768 en pixeles reales: pasa en notebooks con la
+        escala de Windows al 125 % / 150 % o con pantalla menor de 1366x768. Todas las coordenadas suponen 1024x768."""
+        rc = wintypes.RECT()
+        user32.GetClientRect(self.hwnd, ctypes.byref(rc))
+        w, h = rc.right - rc.left, rc.bottom - rc.top
+        sw, sh = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        clave = (w, h, sw, sh, self.ox, self.oy)
+        if getattr(self, "_tam_avisado", None) == clave:
+            return
+        self._tam_avisado = clave
+        log(f"Pantalla: {sw}x{sh} px; ventana del juego: {w}x{h} px en ({self.ox},{self.oy})")
+        if abs(w - 1024) > 12 or abs(h - 768) > 12:
+            log(f"AVISO: la ventana del juego mide {w}x{h}, no 1024x768: los clics caeran corridos. "
+                "Ejecuta arreglar_pantalla.bat (escala de Windows) y reabre el juego.")
+            sonido.pitar(500, 400)
+        elif self.ox < 0 or self.oy < 0 or self.ox + 1024 > sw or self.oy + 768 > sh:
+            log("AVISO: parte de la ventana del juego queda fuera de la pantalla: muevela para que se vea completa.")
 
     def captura(self, caja):
         from PIL import ImageGrab
