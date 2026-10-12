@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icono.png" width="120" alt="AudiHacks">
+  <img src="assets/icono.png" width="120" alt="AuSecret">
 </p>
 
-<h1 align="center">AudiHacks</h1>
+<h1 align="center">AuSecret</h1>
 
 <p align="center">
   <b>Tu Secret Garden de Audition, trabajando solo.</b><br>
@@ -32,10 +32,10 @@
 2. Doble clic en **`instalar.bat`**. Hace todo solo:
    - instala Python 3.12 si no lo tienes (con winget) y las librerías,
    - crea las tareas de iniciar/detener (pide el aviso de administrador **una vez**),
-   - deja el acceso **«AudiHacks»** con su icono en el Escritorio y abre la interfaz.
+   - deja el acceso **«AuSecret»** y «Detener AuSecret» (parada de emergencia) en el Escritorio y abre la interfaz.
 3. Tener el juego abierto, con la sesión iniciada, en el **Secret Garden** (ventana 1024×768, español).
 
-Después se abre siempre con el acceso **«AudiHacks»** del Escritorio (acepta el aviso de administrador).
+Después se abre siempre con el acceso **«AuSecret»** del Escritorio (acepta el aviso de administrador).
 
 ## Primer uso (todo desde la interfaz)
 

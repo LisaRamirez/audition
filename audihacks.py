@@ -139,11 +139,20 @@ def alarma(veces=4):
         sonido.pitar(600, 250)
 
 
+try:
+    import faulthandler
+    _HANG = open(os.path.join(AQUI, "colgado.log"), "a", encoding="utf-8")
+except Exception:                                    # el vigilante de cuelgues nunca debe impedir arrancar
+    faulthandler = None
+
+
 def log(txt):
     linea = time.strftime("%H:%M:%S ") + txt
     print(linea, flush=True)
     with open(os.path.join(AQUI, "audihacks.log"), "a", encoding="utf-8") as f:
         f.write(linea + "\n")
+    if faulthandler:                                 # si pasan 10 min sin escribir nada, vuelca dónde está parado
+        faulthandler.dump_traceback_later(600, repeat=True, file=_HANG)
 
 
 def buscar_plantilla(img, ref, paso=2):
@@ -1110,7 +1119,9 @@ class Audition:
             oscuro = float((a.max(axis=2) < 60).mean())
             mask = (g > r + 8) & (g > b + 25) & (g > 85)
             hoja = float(mask.mean())
-            if CFG["auto_resucitar"] and oscuro > CFG["marchita_umbral"] and hoja < CFG["hoja_umbral"]:
+            tarjeta = float((a.min(axis=2) > 170).mean())    # la parcela vacia muestra una tarjeta crema (~4,5 %)
+            if (CFG["auto_resucitar"] and oscuro > CFG["marchita_umbral"] and hoja < CFG["hoja_umbral"]
+                    and tarjeta < 0.02):
                 res[(f, c)] = "marchita"
             elif hoja < CFG["hoja_umbral"]:
                 res[(f, c)] = "vacia"
@@ -1123,6 +1134,13 @@ class Audition:
                 else:
                     ok = brillante <= CFG["maduro_brillante"]
                 res[(f, c)] = "madura" if ok else "joven"
+        falsas = getattr(self, "_falsas_marchitas", None)
+        if falsas:
+            for k in list(falsas):
+                if res.get(k) == "marchita":
+                    res[k] = "vacia"
+                else:
+                    falsas.discard(k)
         if getattr(self, "semilla_actual", "") in CFG["madurez_por_reloj"]:
             # esta planta no se distingue bien por color: madura SOLO cuando se cumple su reloj
             cumplido = getattr(self, "reloj_cumplido", False)     # respaldo si no se la hora de siembra
@@ -1134,16 +1152,24 @@ class Audition:
             vacias_vistas = self.__dict__.setdefault("_vistas_vacias", set())
             for k, v in res.items():
                 if v == "vacia":
-                    vacias_vistas.add(k)
-                    plantado.pop(k, None)
+                    vacias_vistas.add(k)      # no se borra su hora: una lectura falsa (ventana encima) no debe reiniciar el reloj
                 elif v in ("joven", "madura") and k not in plantado and k in vacias_vistas:
                     plantado[k] = ahora          # estaba vacia y ahora tiene planta (la puso alguien): empieza su reloj
                     vacias_vistas.discard(k)
+            vis = dict(res)                      # lo que se ve en pantalla, antes de aplicar el reloj
+            sin_ver = 0
             for k, v in res.items():
                 if v in ("joven", "madura"):
                     inicio = plantado.get(k)
                     lista = (ahora >= inicio + t_plan) if inicio is not None else cumplido
+                    if (lista and inicio is not None and self.semilla_actual == "menta_verde"
+                            and vis[k] != "madura" and ahora < inicio + t_plan + CFG.get("gracia_visual_seg", 90)):
+                        lista = False                # el reloj dice listo pero la planta aun se ve joven: espero un poco
+                        sin_ver += 1
                     res[k] = "madura" if lista else "joven"
+            if sin_ver and time.time() - getattr(self, "_t_aviso_visual", 0) > 20:
+                self._t_aviso_visual = time.time()
+                log(f"El reloj dice listo pero {sin_ver} plantas aun se ven jovenes: espero hasta {CFG.get('gracia_visual_seg', 90)} s")
         if getattr(self, "forzar_madura", False):
             for k, v in res.items():
                 if v == "joven":
@@ -1370,6 +1396,12 @@ class Audition:
         est = self.estado_celdas()
         n = self.contar(est)
         log(f"Jardin: {n['madura']} maduras, {n['joven']} jovenes, {n['vacia']} vacias, {n['marchita']} marchitas")
+        if n["marchita"] >= 8:
+            # tantas marchitas a la vez no es real: es tierra vacia leida como negra (sin tarjeta crema)
+            self._falsas_marchitas = {k for k, v in est.items() if v == "marchita"}
+            log(f"{n['marchita']} 'marchitas' a la vez: es tierra vacia; las trato como vacias")
+            est = self.estado_celdas()
+            n = self.contar(est)
         if n["marchita"]:
             self.refrescar_jardin()
             self.soltar_herramienta()
@@ -1383,6 +1415,13 @@ class Audition:
             est = self.estado_celdas()
             n = self.contar(est)
             log(f"Tras resucitar: {n['madura']} maduras, {n['joven']} jovenes, {n['vacia']} vacias, {n['marchita']} marchitas")
+            if n["marchita"]:
+                # calibracion: siguen "negras" aunque se resucito y la pantalla las muestra sin planta (tierra
+                # oscura sin tarjeta): son parcelas vacias que se leen mal; se tratan como vacias hasta que cambien
+                self._falsas_marchitas = {k for k, v in est.items() if v == "marchita"}
+                log(f"Calibro: {len(self._falsas_marchitas)} parcelas 'negras' no responden a resucitar: las trato como vacias")
+                est = self.estado_celdas()
+                n = self.contar(est)
         if n["joven"] and not n["madura"]:
             if self.cuidar_pendientes():
                 self.t_siembra = time.time()      # el reloj corre desde el ultimo cuidado
@@ -1439,6 +1478,15 @@ class Audition:
                     sonido.pitar(500, 400)
         elif n["joven"] and not n["vacia"]:
             log(f"{n['joven']} plantas jovenes aun creciendo: no cosecho")
+            if self.celdas_con_burbuja("agua")[0]:           # riego interrumpido: terminar de regar y abonar
+                log("Quedan plantas sin regar de una vuelta interrumpida: las riego")
+                self.regar_por_burbujas()
+                ab, _ = self.celdas_con_burbuja("abono")
+                if ab:
+                    self.abonar_en(ab)
+            if self.sacos_presentes():                      # quedaron sacos de una vuelta interrumpida: levantarlos
+                log("Quedan sacos en el suelo: los levanto")
+                self.recoger_drops()
             return False
         if CFG["cortar_desalineadas"]:
             self.limpiar_desalineadas()
@@ -1528,9 +1576,16 @@ def segundos_sin_tocar():
 
 def esperar_turno(minimo=None):
     minimo = minimo or CFG["segundos_sin_tocar"]
+    t0, ult = time.time(), 0
     while segundos_sin_tocar() < minimo:
         revisar()
         dormir(0.5)
+        espera = time.time() - t0
+        if espera > 30 and time.time() - ult > 120:      # no esperar en silencio: la planta se puede secar
+            ult = time.time()
+            log(f"Hay que cortar/atender pero estas usando el mouse o teclado (llevo {espera/60:.1f} min esperando): "
+                f"sueltalos {minimo} s para que el programa trabaje")
+            alarma(2)
     for n in range(CFG["cuenta_regresiva"], 0, -1):
         revisar()
         sonido.pitar(880, 120, "cuenta")
@@ -1569,7 +1624,7 @@ def _rafaga(a, semilla, listo_en):
     primera = True
     limites = 0
     for intento in range(1, 8):
-        if os.path.exists(os.path.join(AQUI, "reiniciar_cuenta.flag")):
+        if os.path.exists(os.path.join(AQUI, "reiniciar_cuenta.flag")) or os.path.exists(os.path.join(AQUI, "pausa.flag")):
             return False                          # orden de la interfaz: que el ciclo la atienda antes de seguir cortando
         try:
             if a.manejar_mensajes():
@@ -1637,7 +1692,7 @@ def ciclo(args):
         log(f"Modo alternar. Patron: {patron}")
     if por_horario:
         log(f"Modo horario: {CFG['horario']}; ahora toca {patron[0]}")
-    for nombre_flag in ("cosechar_ya.flag", "reiniciar_cuenta.flag"):
+    for nombre_flag in ("cosechar_ya.flag", "reiniciar_cuenta.flag", "pausa.flag"):
         ruta_flag = os.path.join(AQUI, nombre_flag)
         if os.path.exists(ruta_flag) and time.time() - os.path.getmtime(ruta_flag) > 120:
             os.remove(ruta_flag)
@@ -1672,8 +1727,27 @@ def ciclo(args):
                 json.dump({"semilla": sig, "listo_en": listo_en, "indice": indice,
                            "plantado": {f"{k[0]},{k[1]}": v for k, v in pl.items()}}, f)
 
+    flag_pausa = os.path.join(AQUI, "pausa.flag")
+
+    def en_pausa():
+        """Pausa pedida desde la interfaz (planto yo): no toca el juego ni corta nada; solo mira la pantalla para
+        anotar que parcelas estaban vacias y ahora tienen planta (las que pusiste tu empiezan su propio reloj)."""
+        if not os.path.exists(flag_pausa):
+            return False
+        log("PAUSA: no toco el juego mientras plantas tu (se reanuda al quitar la pausa en la interfaz)")
+        while os.path.exists(flag_pausa) and not _STOP.is_set():
+            if not args.seco:
+                try:
+                    a.mirar_pasivo()
+                except Exception:
+                    pass
+            dormir(3)
+        log("Pausa terminada: sigo")
+        return True
+
     while True:
         desarmar()
+        en_pausa()
         aj = ajustes.leer()
         if os.path.exists(flag_ya) and not getattr(a, "forzar_madura", False):
             a.forzar_madura = True
@@ -1707,6 +1781,8 @@ def ciclo(args):
         while (listo_en and time.time() < listo_en + ajustes.leer()["margen_seg"]
                and not toca_visita() and not os.path.exists(flag_ya)
                and not os.path.exists(flag_reinicio)):                    # aun no toca
+            if os.path.exists(flag_pausa):
+                en_pausa()
             dormir(1)
             if not args.seco and time.time() - t_mira >= 40:
                 # mirada silenciosa (sin mouse): si hay parcelas vacias en dos miradas seguidas, no esperar al reloj
@@ -1731,7 +1807,7 @@ def ciclo(args):
                         log(f"Estoy en la pantalla '{otra}', no en el jardin: voy al Secret Garden sin esperar")
                         hay_cuadro = True
                         break
-                if est_w is not None:
+                if est_w is not None and CFG.get("vigilar_vacias", False):    # apagado: la espera la manda el reloj
                     vacias_vistas =vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
                     if vacias_vistas >= 2:
                         log(f"Veo {a.contar(est_w)['vacia']} parcelas vacias mientras espero: las atiendo sin esperar el reloj")
@@ -1791,6 +1867,19 @@ def ciclo(args):
             if args.ciclos and n >= args.ciclos:
                 return
         else:
+            # una vuelta interrumpida pudo sembrar y guardar la hora sin avisar: recargarla del archivo para esperar
+            # en silencio hasta esa hora, en vez de tomar el mouse a mirar el jardin cada 3 min
+            try:
+                with open(estado, encoding="utf-8") as f:
+                    e2 = json.load(f)
+                if e2.get("listo_en") and e2["listo_en"] > time.time() and e2.get("semilla") in CFG["tiempos_min"]:
+                    listo_en = e2["listo_en"]
+                    a.semilla_actual = e2["semilla"]
+                    a.plantado_en = {tuple(int(x) for x in k.split(",")): v for k, v in e2.get("plantado", {}).items()}
+                    log(f"Recargo la hora de siembra: cosecho a las {time.strftime('%H:%M:%S', time.localtime(listo_en))}")
+                    continue
+            except (OSError, ValueError):
+                pass
             espera = aj["intervalo_seg"] if aj["revision_activa"] else max(aj["intervalo_seg"], 180)
             log(f"Nada que hacer ahora; vuelvo a mirar en {espera} s"
                 + ("" if aj["revision_activa"] else " (revision activa apagada)"))

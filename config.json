@@ -77,9 +77,9 @@
     "x0": 371,
     "y0": 176
   },
-  "pausa_arrastre": 0.45,
+  "pausa_arrastre": 0.65,
   "pausa_abono": 0.18,
-  "auto_resucitar": false,
+  "auto_resucitar": true,
   "marchita_umbral": 0.4,
   "hoja_umbral": 0.05,
   "semillas": {
@@ -98,7 +98,7 @@
     "menta": 64
   },
   "maduro_brillante": 0.1,
-  "espera_maduracion_seg": 60,
+  "espera_maduracion_seg": 90,
   "drops": {
     "x0": 370,
     "y0": 215,
@@ -221,5 +221,6 @@
       664
     ]
   },
-  "sonido": false
+  "sonido": false,
+  "sincronizar_jardin": true
 }

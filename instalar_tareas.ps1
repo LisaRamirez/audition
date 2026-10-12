@@ -5,9 +5,10 @@
 #   schtasks /run /tn AudiHacks_MentaVerde
 #   schtasks /run /tn AudiHacks_Detener
 # Solo estas tareas tienen privilegios elevados; el resto del PC no cambia.
+param([string]$Python = "")
 
 $carpeta = $PSScriptRoot
-$python  = (Get-Command python).Source
+$python  = if ($Python -and (Test-Path $Python)) { $Python } else { (Get-Command python).Source }
 $usuario = "$env:USERDOMAIN\$env:USERNAME"
 
 $principal = New-ScheduledTaskPrincipal -UserId $usuario -LogonType Interactive -RunLevel Highest

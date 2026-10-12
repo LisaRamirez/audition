@@ -37,6 +37,14 @@ OPCIONES = {
 TAREAS = {"romero": "AudiHacks_Romero", "menta_verde": "AudiHacks_MentaVerde"}
 REFERENCIAS = (("login", "Pantalla de login"), ("items_nuevos", "Cartel Items nuevos"),
                ("aviso_circulo", "Aviso botón circular"), ("mercado", "Panel de semillas"))
+ICONOS = {"Cuenta": "☺", "Emergencia": "⚠", "Espera": "⏱", "Parcelas": "▦", "Sonido": "♪",
+          "Referencias": "◉", "Registro": "☰"}
+
+
+def T(nombre):
+    return f"{ICONOS[nombre]} {nombre}"
+
+
 RUIDO = ("Empiezo en", "Confirmar", "abonar (", "  drop (", "sin cuadro en")
 
 
@@ -125,7 +133,7 @@ class App(ctk.CTk):
     def __init__(self, sin_admin=False):
         super().__init__(fg_color=NEGRO)
         ctk.set_appearance_mode("dark")
-        self.title("AudiHacks")
+        self.title("AuSecret")
         self.geometry("610x415")
         self._ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audihacks.ico")
         self.after(250, self._poner_icono)      # customtkinter pone su icono propio al abrir: se cambia despues
@@ -140,7 +148,7 @@ class App(ctk.CTk):
         # --- cabecera ---
         cab = ctk.CTkFrame(self, fg_color=NEGRO)
         cab.pack(fill="x", padx=14, pady=(8, 0))
-        ctk.CTkLabel(cab, text="AudiHacks", font=F(18, "bold"), text_color=BLANCO).pack(side="left")
+        ctk.CTkLabel(cab, text="AuSecret", font=F(18, "bold"), text_color=BLANCO).pack(side="left")
         self.luz = ctk.CTkLabel(cab, text="●  Detenido", font=F(12, "bold"), text_color=ROJO)
         self.luz.pack(side="right")
 
@@ -163,20 +171,24 @@ class App(ctk.CTk):
         # --- control ---
         fila = ctk.CTkFrame(self, fg_color=NEGRO)
         fila.pack(fill="x", padx=12, pady=(0, 4))
-        self.sel = ctk.CTkOptionMenu(fila, values=list(OPCIONES), width=250, height=26, fg_color=BOTON,
+        self.sel = ctk.CTkOptionMenu(fila, values=list(OPCIONES), width=215, height=26, fg_color=BOTON,
                                      button_color=BOTON_H, button_hover_color=BORDE, text_color=BLANCO,
                                      dropdown_fg_color=BOTON, dropdown_text_color=BLANCO,
                                      dropdown_hover_color=BOTON_H, font=F(11))
         self.sel.set("Romero (7 min)")
         self.sel.pack(side="left")
-        self.btn_ini = ctk.CTkButton(fila, text="Iniciar", width=100, height=26, fg_color=VERDE,
+        self.btn_ini = ctk.CTkButton(fila, text="▶  Iniciar", width=100, height=26, fg_color=VERDE,
                                      hover_color="#9333ea", text_color=BLANCO, font=F(11, "bold"),
                                      command=self.iniciar)
-        self.btn_ini.pack(side="left", padx=(8, 4))
-        self.btn_det = ctk.CTkButton(fila, text="Detener", width=100, height=26, fg_color=ROJO,
+        self.btn_ini.pack(side="left", padx=(6, 4))
+        self.btn_det = ctk.CTkButton(fila, text="■  Detener", width=90, height=26, fg_color=ROJO,
                                      hover_color="#db2777", text_color=BLANCO, font=F(11, "bold"),
                                      command=self.detener)
-        self.btn_det.pack(side="left")
+        self.btn_det.pack(side="left", padx=(0, 4))
+        self.btn_pausa = ctk.CTkButton(fila, text="⏸  Pausar", width=100, height=26, fg_color=AMBAR,
+                                       hover_color="#d97706", text_color=NEGRO, font=F(11, "bold"),
+                                       command=self.alternar_pausa)
+        self.btn_pausa.pack(side="left")
         ctk.CTkLabel(fila, text="F12 = emergencia", font=F(10), text_color=GRIS).pack(side="right")
 
         # --- pestañas ---
@@ -186,12 +198,31 @@ class App(ctk.CTk):
                               segmented_button_unselected_hover_color=BOTON_H, text_color=BLANCO, height=150)
         tabs.pack(fill="both", expand=True, padx=12, pady=(0, 10))
         self.tabs = tabs
-        for n in ("Cuenta", "Espera", "Parcelas", "Sonido", "Referencias", "Registro"):
-            tabs.add(n)
+        for n in ("Cuenta", "Emergencia", "Espera", "Parcelas", "Sonido", "Referencias", "Registro"):
+            tabs.add(T(n))
         tabs._segmented_button.configure(font=F(11))
 
+        # Emergencia: botones grandes para cuando vas a plantar tú o algo sale mal
+        t = tabs.tab(T("Emergencia"))
+        fe = ctk.CTkFrame(t, fg_color=TARJETA)
+        fe.pack(fill="x")
+        ctk.CTkButton(fe, text="■  DETENER YA", width=130, height=30, fg_color=ROJO, hover_color="#db2777",
+                      text_color=BLANCO, font=F(11, "bold"), command=self.detener_ya).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(fe, text="✂  Cortar ahora", width=125, height=30, command=self.cortar_ahora,
+                      **{**estilo_boton, "height": 30}).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(fe, text="↻  Reiniciar cuenta", width=140, height=30, command=self.reiniciar_cuenta,
+                      **{**estilo_boton, "height": 30}).pack(side="left")
+        self.msg_em = ctk.StringVar(value="")
+        self.msg_aj = self.msg_em                                  # un solo mensaje para todas las órdenes
+        ctk.CTkLabel(t, textvariable=self.msg_em, font=F(10), text_color=VERDE, anchor="w", wraplength=540,
+                     justify="left").pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(t, text="Si vas a plantar tú: ⏸ PAUSAR (arriba), planta y ▶ REANUDAR. Tus plantas empiezan su "
+                             "propio reloj y no se cortan antes.\nCortar ahora: trata todo como maduro. Reiniciar "
+                             "cuenta: cuenta los minutos desde ahora.", font=F(10), text_color=GRIS, anchor="w",
+                     wraplength=540, justify="left").pack(fill="x")
+
         # Espera
-        t = tabs.tab("Espera")
+        t = tabs.tab(T("Espera"))
         aj = ajustes.leer()
         g = ctk.CTkFrame(t, fg_color=TARJETA)
         g.pack(fill="x")
@@ -220,15 +251,13 @@ class App(ctk.CTk):
         self.e_min["menta"] = campo(3, 6, "Menta", aj["minutos"]["menta"], "min")
         f3 = ctk.CTkFrame(t, fg_color=TARJETA)
         f3.pack(fill="x", pady=(6, 0))
-        for texto, cmd in (("Aplicar", self.guardar_ajustes), ("Cortar ahora", self.cortar_ahora),
-                           ("Reiniciar cuenta", self.reiniciar_cuenta)):
-            ctk.CTkButton(f3, text=texto, width=110, command=cmd, **estilo_boton).pack(side="left", padx=(0, 6))
-        self.msg_aj = ctk.StringVar(value="")
-        ctk.CTkLabel(f3, textvariable=self.msg_aj, font=F(10), text_color=VERDE, anchor="w", wraplength=200,
+        ctk.CTkButton(f3, text="✔  Aplicar", width=110, command=self.guardar_ajustes, **estilo_boton).pack(
+            side="left", padx=(0, 6))
+        ctk.CTkLabel(f3, textvariable=self.msg_aj, font=F(10), text_color=VERDE, anchor="w", wraplength=380,
                      justify="left").pack(side="left", padx=6)
 
         # Parcelas
-        t = tabs.tab("Parcelas")
+        t = tabs.tab(T("Parcelas"))
         ctk.CTkLabel(t, text="Marca las parcelas que plantaste tú: el programa no las toca "
                              "(no siembra, riega, abona ni corta ahí).", font=F(10), text_color=GRIS, anchor="w",
                      wraplength=540, justify="left").pack(fill="x")
@@ -245,7 +274,7 @@ class App(ctk.CTk):
                 self.pintar_parcela(k)
 
         # Cuenta
-        t = tabs.tab("Cuenta")
+        t = tabs.tab(T("Cuenta"))
         c = ctk.CTkFrame(t, fg_color=TARJETA)
         c.pack(fill="x")
         c.grid_columnconfigure((0, 1), weight=1)
@@ -262,7 +291,7 @@ class App(ctk.CTk):
                         checkbox_height=16).pack(anchor="w", pady=(8, 4))
         fc = ctk.CTkFrame(t, fg_color=TARJETA)
         fc.pack(fill="x")
-        ctk.CTkButton(fc, text="Guardar cuenta", width=120, command=self.guardar_cuenta, **estilo_boton).pack(side="left")
+        ctk.CTkButton(fc, text="✔  Guardar cuenta", width=120, command=self.guardar_cuenta, **estilo_boton).pack(side="left")
         self.msg_cuenta = ctk.StringVar(value="")
         ctk.CTkLabel(fc, textvariable=self.msg_cuenta, font=F(10), text_color=VERDE).pack(side="left", padx=8)
         fl = ctk.CTkFrame(t, fg_color=TARJETA)
@@ -271,12 +300,12 @@ class App(ctk.CTk):
         self.e_lanz = ctk.CTkEntry(fl, **estilo_entrada)
         self.e_lanz.pack(side="left", fill="x", expand=True, padx=6)
         self.e_lanz.insert(0, ajustes.leer().get("lanzador", ""))
-        ctk.CTkButton(fl, text="Detectar", width=70, command=self.detectar_lanzador, **estilo_boton).pack(side="left")
+        ctk.CTkButton(fl, text="⌕  Detectar", width=70, command=self.detectar_lanzador, **estilo_boton).pack(side="left")
         ctk.CTkLabel(t, text="Contraseña cifrada con Windows. Vacía = conserva la guardada.", font=F(10),
                      text_color=GRIS, anchor="w").pack(fill="x", pady=(3, 0))
 
         # Sonido
-        t = tabs.tab("Sonido")
+        t = tabs.tab(T("Sonido"))
         cfg = sonido.leer()
         self.snd_alertas = ctk.BooleanVar(value=cfg["alertas"])
         self.snd_cuenta = ctk.BooleanVar(value=cfg["cuenta_atras"])
@@ -296,10 +325,10 @@ class App(ctk.CTk):
         self.vol.pack(side="left", padx=8)
         self.lbl_vol = ctk.CTkLabel(fv, text=f"{cfg['volumen']} %", font=F(11), text_color=BLANCO)
         self.lbl_vol.pack(side="left")
-        ctk.CTkButton(fv, text="Probar", width=70, command=self.probar_sonido, **estilo_boton).pack(side="right")
+        ctk.CTkButton(fv, text="♪  Probar", width=70, command=self.probar_sonido, **estilo_boton).pack(side="right")
 
         # Referencias
-        t = tabs.tab("Referencias")
+        t = tabs.tab(T("Referencias"))
         ctk.CTkLabel(t, text="Con esa pantalla visible en el juego, pulsa el botón (guarda la imagen en 5 s):",
                      font=F(10), text_color=GRIS, anchor="w").pack(fill="x")
         fr = ctk.CTkFrame(t, fg_color=TARJETA)
@@ -310,12 +339,12 @@ class App(ctk.CTk):
                 row=i // 2, column=i % 2, sticky="ew", padx=(0, 6), pady=3)
 
         # Registro
-        self.txt = ctk.CTkTextbox(tabs.tab("Registro"), fg_color="#07040c", text_color=BLANCO, border_width=1,
+        self.txt = ctk.CTkTextbox(tabs.tab(T("Registro")), fg_color="#07040c", text_color=BLANCO, border_width=1,
                                   border_color=BORDE, font=ctk.CTkFont(family="Consolas", size=10), wrap="none",
                                   corner_radius=6)
         self.txt.pack(fill="both", expand=True)
         self.txt.configure(state="disabled")
-        tabs.set("Cuenta")
+        tabs.set(T("Cuenta"))
 
         datos = cuenta.cargar()
         if datos:
@@ -471,7 +500,7 @@ class App(ctk.CTk):
             time.sleep(1.5)
             ejecutar(["schtasks", "/run", "/tn", TAREAS[semilla]])
         else:
-            messagebox.showinfo("AudiHacks", "Este modo necesita la interfaz como administrador.\n"
+            messagebox.showinfo("AuSecret", "Este modo necesita la interfaz como administrador.\n"
                                 "Ábrela con iniciar_interfaz.bat, o elige Romero o Menta Verde.")
             return
         self.ultima_consulta = 0
@@ -484,8 +513,34 @@ class App(ctk.CTk):
         ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)   # por si quedo el boton del mouse pulsado
         self.ultima_consulta = 0
 
+    def alternar_pausa(self):
+        """Pausa/reanuda: con pausa.flag el programa no toca el juego (para plantar a mano sin que corte)."""
+        flag = os.path.join(AQUI, "pausa.flag")
+        if os.path.exists(flag):
+            os.remove(flag)
+            self.btn_pausa.configure(text="⏸  Pausar", fg_color=AMBAR, text_color=NEGRO)
+            self.msg_em.set("Reanudado: tus plantas empiezan su reloj desde que el programa las vio.")
+            return
+        if not self.corriendo():
+            self.msg_em.set("El programa está detenido: no hace falta pausar.")
+            return
+        open(flag, "w").close()
+        self.btn_pausa.configure(text="▶  Reanudar", fg_color=VERDE, text_color=BLANCO)
+        self.msg_em.set("En pausa: el programa no toca el juego. Planta tranquilo y pulsa REANUDAR al terminar.")
+
+    def detener_ya(self):
+        """Parada de emergencia: detiene el programa y quita cualquier orden pendiente."""
+        self.detener()
+        for n in ("pausa.flag", "cosechar_ya.flag", "reiniciar_cuenta.flag"):
+            try:
+                os.remove(os.path.join(AQUI, n))
+            except OSError:
+                pass
+        self.btn_pausa.configure(text="⏸  Pausar", fg_color=AMBAR, text_color=NEGRO)
+        self.msg_em.set("Detenido al instante.")
+
     def cerrar(self):
-        self.destroy()       # el programa de cosecha sigue corriendo: cerrar la ventana no lo detiene
+        self.destroy()     # el programa de cosecha sigue corriendo: cerrar la ventana no lo detiene
 
     # --- estado en vivo ---
     def refrescar(self):
@@ -499,9 +554,9 @@ class App(ctk.CTk):
         # botones: el que ya esta "hecho" se apaga (oscuro), el que se puede usar queda brillante
         if activo:
             self.btn_ini.configure(text="▶  En marcha", state="disabled", fg_color="#2a1747", text_color_disabled="#9d7fd1")
-            self.btn_det.configure(text="Detener", state="normal", fg_color=ROJO, text_color=BLANCO)
+            self.btn_det.configure(text="■  Detener", state="normal", fg_color=ROJO, text_color=BLANCO)
         else:
-            self.btn_ini.configure(text="Iniciar", state="normal", fg_color=VERDE, text_color=BLANCO)
+            self.btn_ini.configure(text="▶  Iniciar", state="normal", fg_color=VERDE, text_color=BLANCO)
             self.btn_det.configure(text="■  Detenido", state="disabled", fg_color="#3a1230", text_color_disabled="#d27aa8")
         visibles = [l for l in lineas if not any(r in l for r in RUIDO)]
         ultima = visibles[-1] if visibles else ""
