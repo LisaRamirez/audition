@@ -208,9 +208,9 @@ class App(ctk.CTk):
         fe.pack(fill="x")
         ctk.CTkButton(fe, text="■  DETENER YA", width=130, height=30, fg_color=ROJO, hover_color="#db2777",
                       text_color=BLANCO, font=F(11, "bold"), command=self.detener_ya).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(fe, text="✂  Cortar ahora", width=125, height=30, command=self.cortar_ahora,
+        ctk.CTkButton(fe, text="✂  Cortar ahora", width=125, command=self.cortar_ahora,
                       **{**estilo_boton, "height": 30}).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(fe, text="↻  Reiniciar cuenta", width=140, height=30, command=self.reiniciar_cuenta,
+        ctk.CTkButton(fe, text="↻  Reiniciar cuenta", width=140, command=self.reiniciar_cuenta,
                       **{**estilo_boton, "height": 30}).pack(side="left")
         self.msg_em = ctk.StringVar(value="")
         self.msg_aj = self.msg_em                                  # un solo mensaje para todas las órdenes
