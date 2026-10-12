@@ -1447,7 +1447,7 @@ class Audition:
                 # calibracion: siguen "negras" aunque se resucito y la pantalla las muestra sin planta (tierra
                 # oscura sin tarjeta): son parcelas vacias que se leen mal; se tratan como vacias hasta que cambien
                 resto_m = {k for k, v in est.items() if v == "marchita"}
-                if len(resto_m) < 8:
+                if len(resto_m) <= 3:
                     # pocas y no responden: es maleza u otro objeto, no una planta; las dejo en paz 30 min
                     self.__dict__.setdefault("_atascadas", {}).update({k: time.time() + 1800 for k in resto_m})
                     log(f"{sorted(resto_m)} no responden a resucitar ni a cortar: las dejo en paz 30 min y siembro el resto")
@@ -1510,9 +1510,18 @@ class Audition:
                 if resto:
                     log(f"AVISO: no pude vaciar {resto} tras 3 rondas")
                     sonido.pitar(500, 400)
-                    # algo que no se corta (maleza u otro objeto): lo dejo en paz 30 min en vez de insistir
-                    self.__dict__.setdefault("_atascadas", {}).update({k: time.time() + 1800 for k in resto})
-                    log(f"Dejo en paz {resto} durante 30 min: no hay nada que cortar ahi")
+                    if len(resto) <= 3:
+                        # pocas y no se cortan: maleza u otro objeto; las dejo en paz 30 min en vez de insistir
+                        self.__dict__.setdefault("_atascadas", {}).update({k: time.time() + 1800 for k in resto})
+                        log(f"Dejo en paz {resto} durante 30 min: no hay nada que cortar ahi")
+                    else:
+                        # tantas a la vez no son objetos: es la lectura de la pantalla (imagen vieja). No excluyo
+                        # nada: refresco el jardin y dejo que la siguiente vuelta lo vea y siembre las 20
+                        log(f"{len(resto)} parcelas 'sin cortar' a la vez: es lectura, no objetos; refresco y no excluyo nada")
+                        self.refrescar_jardin()
+                        self.soltar_herramienta()
+                        self._atascadas = {}
+                        self._falsas_marchitas = set()
         elif n["joven"] and not n["vacia"]:
             log(f"{n['joven']} plantas jovenes aun creciendo: no cosecho")
             if self.celdas_con_burbuja("agua")[0]:           # riego interrumpido: terminar de regar y abonar
