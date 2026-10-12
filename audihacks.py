@@ -26,7 +26,12 @@ import sonido
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 user32 = ctypes.windll.user32
-user32.SetProcessDPIAware()
+try:        # por monitor: con varios monitores de distinta escala (notebook + pantalla externa) todo va en pixeles reales
+    user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    if not user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):       # PER_MONITOR_AWARE_V2
+        user32.SetProcessDPIAware()
+except (AttributeError, OSError):
+    user32.SetProcessDPIAware()
 
 
 def asegurar_admin():
@@ -809,8 +814,10 @@ class Audition:
     def todas_las_celdas(self):
         """Las parcelas del programa: todas menos las que el usuario marco como suyas (ajustes 'excluir')."""
         excl = {tuple(int(x) for x in k.split(",")) for k in ajustes.leer().get("excluir", [])}
+        ahora = time.time()
+        atascadas = {k for k, t in getattr(self, "_atascadas", {}).items() if t > ahora}
         return [(f, c) for f in range(CFG["parcelas"]["filas"])
-                for c in range(CFG["parcelas"]["columnas"]) if (f, c) not in excl]
+                for c in range(CFG["parcelas"]["columnas"]) if (f, c) not in excl and (f, c) not in atascadas]
 
     def recorrer_verificado(self, herramienta, solo_una=False, celdas=None):
         v = CFG["verificacion"][herramienta]
@@ -1439,8 +1446,14 @@ class Audition:
             if n["marchita"]:
                 # calibracion: siguen "negras" aunque se resucito y la pantalla las muestra sin planta (tierra
                 # oscura sin tarjeta): son parcelas vacias que se leen mal; se tratan como vacias hasta que cambien
-                self._falsas_marchitas = {k for k, v in est.items() if v == "marchita"}
-                log(f"Calibro: {len(self._falsas_marchitas)} parcelas 'negras' no responden a resucitar: las trato como vacias")
+                resto_m = {k for k, v in est.items() if v == "marchita"}
+                if len(resto_m) < 8:
+                    # pocas y no responden: es maleza u otro objeto, no una planta; las dejo en paz 30 min
+                    self.__dict__.setdefault("_atascadas", {}).update({k: time.time() + 1800 for k in resto_m})
+                    log(f"{sorted(resto_m)} no responden a resucitar ni a cortar: las dejo en paz 30 min y siembro el resto")
+                else:
+                    self._falsas_marchitas = resto_m
+                    log(f"Calibro: {len(resto_m)} parcelas 'negras' no responden a resucitar: las trato como vacias")
                 est = self.estado_celdas()
                 n = self.contar(est)
         if n["joven"] and not n["madura"]:
@@ -1497,6 +1510,9 @@ class Audition:
                 if resto:
                     log(f"AVISO: no pude vaciar {resto} tras 3 rondas")
                     sonido.pitar(500, 400)
+                    # algo que no se corta (maleza u otro objeto): lo dejo en paz 30 min en vez de insistir
+                    self.__dict__.setdefault("_atascadas", {}).update({k: time.time() + 1800 for k in resto})
+                    log(f"Dejo en paz {resto} durante 30 min: no hay nada que cortar ahi")
         elif n["joven"] and not n["vacia"]:
             log(f"{n['joven']} plantas jovenes aun creciendo: no cosecho")
             if self.celdas_con_burbuja("agua")[0]:           # riego interrumpido: terminar de regar y abonar
