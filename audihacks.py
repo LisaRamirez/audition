@@ -1856,7 +1856,8 @@ def ciclo(args):
                         break
                 except Exception:
                     pass
-                if est_w is None and getattr(a, "hwnd", 0):
+                if est_w is None and getattr(a, "hwnd", 0) and CFG.get("volver_al_jardin_esperando", False):
+                    # apagado por defecto: mientras espero no tomo el mouse; la pantalla se corrige a la hora del corte
                     try:
                         otra = a.detectar_pantalla()
                     except Exception:
