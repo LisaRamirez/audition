@@ -1262,6 +1262,18 @@ class Audition:
             self.soltar_herramienta()
             est = self.estado_celdas()
             pendientes = [k for k in pendientes if est[k] != "vacia"]
+            if len(pendientes) >= 4 and not getattr(self, "_drops_en_cosecha", False):
+                # tantas 'sin cortar' a la vez suelen ser los sacos que deja la cosecha tapando la parcela
+                # (se leen como planta): los levanto y vuelvo a mirar antes de volver a cortar
+                log(f"{len(pendientes)} parcelas parecen sin cortar: levanto los sacos y vuelvo a mirar")
+                self._drops_en_cosecha = True
+                try:
+                    self.recoger_drops()
+                finally:
+                    self._drops_en_cosecha = False
+                self.soltar_herramienta()
+                est = self.estado_celdas()
+                pendientes = [k for k in pendientes if est[k] != "vacia"]
             log(f"Cosecha ronda {ronda}: {len(celdas) - len(pendientes)}/{len(celdas)} cortadas")
             if not pendientes:
                 return True
