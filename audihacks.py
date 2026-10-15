@@ -468,6 +468,17 @@ class Audition:
         """True si la zona de pantalla se parece a la referencia. False si aun no se ha guardado."""
         archivo, caja = self.REF_REINGRESO[nombre]
         ruta = os.path.join(AQUI, "referencias", archivo)
+        if nombre == "login":
+            # el fondo del login cambia con cada evento (conejos, arcoiris...): se mira solo lo opaco del cuadro,
+            # el titulo y los botones Cancelar y Registrate, que no cambian
+            import numpy as np
+            esperado = {(366, 326, 500, 346): (228, 57, 199), (610, 393, 688, 413): (164, 103, 239),
+                        (610, 420, 688, 440): (228, 123, 226)}
+            for (x0, y0, x1, y1), rgb in esperado.items():
+                m = np.asarray(self.captura((x0, y0, x1, y1))).reshape(-1, 3).mean(0)
+                if max(abs(float(m[i]) - rgb[i]) for i in range(3)) > 14:
+                    return False
+            return True
         if not os.path.exists(ruta):
             return False
         ref = Image.open(ruta).convert("RGB")
