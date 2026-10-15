@@ -210,6 +210,17 @@ class Audition:
         user32.ClientToScreen(self.hwnd, ctypes.byref(p))
         self.ox, self.oy = p.x, p.y
         self._revisar_tamano()
+        if abs(getattr(self, "esc", 1.0) - 1.0) > 0.03 and getattr(self, "_movidas", 0) < 2:
+            # la ventana quedo en un monitor con escala de Windows (125 %...): la llevo al monitor principal (0,0)
+            # donde el juego se ve a 1024x768 reales; solo si hay un monitor principal con esa escala
+            self._movidas = getattr(self, "_movidas", 0) + 1
+            log("Muevo la ventana del juego al monitor principal para verla a 1024x768")
+            user32.SetWindowPos(self.hwnd, 0, 448, 167, 0, 0, 0x0001 | 0x0004)       # SWP_NOSIZE | SWP_NOZORDER
+            dormir(1.5)
+            p = wintypes.POINT(0, 0)
+            user32.ClientToScreen(self.hwnd, ctypes.byref(p))
+            self.ox, self.oy = p.x, p.y
+            self._revisar_tamano()
 
     def _revisar_tamano(self):
         """Avisa (una vez) si la ventana del juego no mide 1024x768 en pixeles reales: pasa en notebooks con la
