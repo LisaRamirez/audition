@@ -219,14 +219,21 @@ class Audition:
         w, h = rc.right - rc.left, rc.bottom - rc.top
         vx, vy = user32.GetSystemMetrics(76), user32.GetSystemMetrics(77)          # escritorio virtual: varios monitores
         sw, sh = vx + user32.GetSystemMetrics(78), vy + user32.GetSystemMetrics(79)
+        # escala de la ventana (Windows la estira al 125 %/150 % en pantallas con escala): todas las
+        # coordenadas del programa son de 1024x768, se convierten a pixeles reales con self.esc
+        esc = w / 1024.0 if w else 1.0
+        if abs(esc - h / 768.0) > 0.03 or not 0.5 <= esc <= 3:
+            esc = 1.0                                   # proporcion rara: no es una escala, no corrijo
+        self.esc = esc
         clave = (w, h, sw, sh, self.ox, self.oy)
         if getattr(self, "_tam_avisado", None) == clave:
             return
         self._tam_avisado = clave
         log(f"Pantalla: {sw}x{sh} px; ventana del juego: {w}x{h} px en ({self.ox},{self.oy})")
-        if abs(w - 1024) > 12 or abs(h - 768) > 12:
-            log(f"AVISO: la ventana del juego mide {w}x{h}, no 1024x768: los clics caeran corridos. "
-                "Ejecuta arreglar_pantalla.bat (escala de Windows) y reabre el juego.")
+        if abs(esc - 1.0) > 0.03:
+            log(f"La ventana del juego esta escalada x{esc:.2f}: ajusto capturas y clics a esa escala")
+        elif abs(w - 1024) > 12 or abs(h - 768) > 12:
+            log(f"AVISO: la ventana del juego mide {w}x{h}, no 1024x768 (proporcion distinta): los clics caeran corridos.")
             sonido.pitar(500, 400)
         elif self.ox < vx or self.oy < vy or self.ox + 1024 > sw or self.oy + 768 > sh:
             log("AVISO: parte de la ventana del juego queda fuera de la pantalla: muevela para que se vea completa.")
@@ -234,8 +241,14 @@ class Audition:
     def captura(self, caja):
         from PIL import ImageGrab
         x0, y0, x1, y1 = caja
-        return ImageGrab.grab(bbox=(self.ox + x0, self.oy + y0, self.ox + x1, self.oy + y1),
-                              all_screens=True).convert("RGB")
+        e = getattr(self, "esc", 1.0)
+        if abs(e - 1.0) < 0.01:
+            return ImageGrab.grab(bbox=(self.ox + x0, self.oy + y0, self.ox + x1, self.oy + y1),
+                                  all_screens=True).convert("RGB")
+        im = ImageGrab.grab(bbox=(self.ox + round(x0 * e), self.oy + round(y0 * e),
+                                  self.ox + round(x1 * e), self.oy + round(y1 * e)),
+                            all_screens=True).convert("RGB")
+        return im.resize((x1 - x0, y1 - y0), Image.LANCZOS)      # de vuelta a la escala de 1024x768
 
     def en_secret_garden(self):
         ref = Image.open(os.path.join(AQUI, "referencias", "secret_garden_cartel.png")).convert("RGB")
@@ -702,7 +715,8 @@ class Audition:
         cy += random.randint(-3, 3)
         cur = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(cur))
-        tx, ty = self.ox + cx, self.oy + cy
+        e = getattr(self, "esc", 1.0)
+        tx, ty = self.ox + round(cx * e), self.oy + round(cy * e)
         dist = max(abs(tx - cur.x), abs(ty - cur.y))
         turbo = rapido and getattr(self, "_turbo_drops", False)      # solo mientras se levantan sacos
         pasos = max(2, min(8, dist // 45)) if turbo else max(4, min(25, dist // 18))
@@ -1405,6 +1419,7 @@ class Audition:
         p = wintypes.POINT(0, 0)
         user32.ClientToScreen(h, ctypes.byref(p))
         self.ox, self.oy = p.x, p.y
+        self._revisar_tamano()                   # la ventana pudo cambiar de monitor (otra escala)
         arriba = user32.WindowFromPoint(wintypes.POINT(self.ox + 500, self.oy + 400))
         if not arriba or user32.GetAncestor(arriba, 2) != h:      # 2 = GA_ROOT: otra ventana encima
             return None
