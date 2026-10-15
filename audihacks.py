@@ -396,11 +396,18 @@ class Audition:
     def detectar_pantalla(self):
         """Compara con una imagen de referencia de cada pantalla; devuelve el nombre o None."""
         mejor, mejor_dif = None, 1e9
+        import glob
         for nombre, caja in self.PANTALLAS.items():
-            ref = Image.open(os.path.join(AQUI, "referencias", f"pantalla_{nombre}.png")).convert("RGB")
-            dif = sum(ImageStat.Stat(ImageChops.difference(ref, self.captura(caja))).mean) / 3
-            if dif < mejor_dif:
-                mejor, mejor_dif = nombre, dif
+            vivo = self.captura(caja)
+            # varias referencias por pantalla (pantalla_ciudad.png, pantalla_ciudad_halloween.png...): los eventos
+            # del juego cambian el decorado
+            for ruta in glob.glob(os.path.join(AQUI, "referencias", f"pantalla_{nombre}*.png")):
+                ref = Image.open(ruta).convert("RGB")
+                if ref.size != vivo.size:
+                    continue
+                dif = sum(ImageStat.Stat(ImageChops.difference(ref, vivo)).mean) / 3
+                if dif < mejor_dif:
+                    mejor, mejor_dif = nombre, dif
         return mejor if mejor_dif < CFG["umbral_pantalla"] else None
 
     def esperar_pantalla(self, distinta_de, max_seg=45):
@@ -437,6 +444,14 @@ class Audition:
                     if self.cerrar_avisos():             # un cartel tapa la pantalla: cerrarlo y mirar de nuevo
                         dormir(1.0)
                         continue
+                    if not getattr(self, "_clic_cartel", False):
+                        # la animacion 'Secret Garden presenta' puede quedar oscureciendo la pantalla hasta un clic
+                        self._clic_cartel = True
+                        log("Pantalla sin reconocer: un clic en terreno libre por si es el cartel de entrada")
+                        self.mover(*CFG["terreno_libre"]); self._pulsar()
+                        dormir(4.0)
+                        continue
+                    self._clic_cartel = False
                     raise PantallaDesconocida("Pantalla desconocida (login, desconexion u otra). No toco nada.")
                 log(f"Estoy en '{p}': voy hacia el Secret Garden")
                 self.soltar_herramienta() if p in ("couple",) else None
