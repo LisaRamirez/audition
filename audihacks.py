@@ -1313,6 +1313,13 @@ class Audition:
             self.soltar_herramienta()
             est = self.estado_celdas()
             pendientes = [k for k in pendientes if est[k] != "vacia"]
+            negras = [k for k in pendientes if est[k] == "marchita"]
+            if len(negras) >= 4:
+                # tras cortar, tierra vacia leida como 'negra' (sin tarjeta crema): no son plantas, se tratan como vacias
+                log(f"{len(negras)} parcelas 'negras' tras cortar: es tierra vacia mal leida; las trato como vacias")
+                self._falsas_marchitas = set(getattr(self, "_falsas_marchitas", set())) | set(negras)
+                est = self.estado_celdas()
+                pendientes = [k for k in pendientes if est[k] != "vacia"]
             if len(pendientes) >= 4 and not getattr(self, "_drops_en_cosecha", False):
                 # tantas 'sin cortar' a la vez suelen ser los sacos que deja la cosecha tapando la parcela
                 # (se leen como planta): los levanto y vuelvo a mirar antes de volver a cortar
