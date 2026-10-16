@@ -1908,6 +1908,11 @@ def ciclo(args):
                     est_w = a.mirar_pasivo()
                 except Exception:
                     est_w = None
+                if getattr(a, "hwnd", 0) and not user32.FindWindowW(None, "Audition"):
+                    # el juego se cerro mientras esperaba: reingresar ya, no esperar a la hora del corte
+                    log("El juego se cerro mientras esperaba: reingreso ahora")
+                    hay_cuadro = True
+                    break
                 try:
                     if getattr(a, "hwnd", 0) and (a.hay_error_servidor() or a.buscar_boton_circulo()):
                         log("Cuadro azul del juego (error / desconexion) mientras espero: lo atiendo ahora")
