@@ -1527,7 +1527,8 @@ class Audition:
                     log(f"Calibro: {len(resto_m)} parcelas 'negras' no responden a resucitar: las trato como vacias")
                 est = self.estado_celdas()
                 n = self.contar(est)
-        if n["joven"] and not n["madura"]:
+        if n["joven"]:
+            # aunque ya haya alguna madura mezclada: lo que pide agua o abono se atiende primero
             if self.cuidar_pendientes():
                 self.t_siembra = time.time()      # el reloj corre desde el ultimo cuidado
                 if getattr(self, "plantado_en", None):
@@ -1936,12 +1937,14 @@ def ciclo(args):
                 if est_w is not None and time.time() - getattr(a, "_t_agua", 0) > 600:
                     try:
                         sedientas = len(a.celdas_con_burbuja("agua")[0])
+                        hambrientas = len(a.celdas_con_burbuja("abono")[0])
                     except Exception:
-                        sedientas = 0
-                    if sedientas >= 10:
-                        # las plantas vuelven a pedir agua mientras crecen: se riegan una vez (cada 10 min como maximo)
+                        sedientas = hambrientas = 0
+                    if sedientas >= 10 or hambrientas >= 5:
+                        # plantas que piden agua (vuelven a pedirla mientras crecen) o abono (una vuelta interrumpida):
+                        # se atienden una vez (cada 10 min como maximo)
                         a._t_agua = time.time()
-                        log(f"Veo {sedientas} plantas pidiendo agua mientras espero: las riego")
+                        log(f"Veo {sedientas} plantas pidiendo agua y {hambrientas} abono mientras espero: las atiendo")
                         break
                 if est_w is not None and CFG.get("vigilar_vacias", False):    # apagado: la espera la manda el reloj
                     vacias_vistas =vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
