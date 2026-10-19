@@ -1530,6 +1530,9 @@ class Audition:
         if n["joven"] and not n["madura"]:
             if self.cuidar_pendientes():
                 self.t_siembra = time.time()      # el reloj corre desde el ultimo cuidado
+                if getattr(self, "plantado_en", None):
+                    # regla: los minutos se cuentan desde el ULTIMO abono; un riego/abono a mitad de ciclo reinicia la cuenta
+                    self.plantado_en = {k: self.t_siembra for k in self.plantado_en}
                 self.recoger_drops()
                 return True
         maduras = [k for k, v in est.items() if v == "madura"]
