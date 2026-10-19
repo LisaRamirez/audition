@@ -1930,6 +1930,16 @@ def ciclo(args):
                         log(f"Estoy en la pantalla '{otra}', no en el jardin: voy al Secret Garden sin esperar")
                         hay_cuadro = True
                         break
+                if est_w is not None and time.time() - getattr(a, "_t_agua", 0) > 600:
+                    try:
+                        sedientas = len(a.celdas_con_burbuja("agua")[0])
+                    except Exception:
+                        sedientas = 0
+                    if sedientas >= 10:
+                        # las plantas vuelven a pedir agua mientras crecen: se riegan una vez (cada 10 min como maximo)
+                        a._t_agua = time.time()
+                        log(f"Veo {sedientas} plantas pidiendo agua mientras espero: las riego")
+                        break
                 if est_w is not None and CFG.get("vigilar_vacias", False):    # apagado: la espera la manda el reloj
                     vacias_vistas =vacias_vistas + 1 if a.contar(est_w)["vacia"] >= 2 else 0
                     if vacias_vistas >= 2:
